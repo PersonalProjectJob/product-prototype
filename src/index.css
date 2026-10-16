@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-paper: #FFFFFF;
+  --color-paper-subtle: #F8F9FA;
+  --color-ink: #1D1F21;
+  --color-ink-muted: #666666;
+  --color-gold: #D4AF37;
+  --color-gold-light: #f3d28a;
+  --color-emerald: #0a5c3b;
+  --color-crimson: #AE2238;
+  --font-display: 'Satoshi', 'DM Sans', sans-serif;
+  --font-body: 'DM Sans', Satoshi, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  background-color: var(--color-paper);
+  overflow-x: clip;
+}
+
+/* Custom smooth luxury scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #c2c2c2;
+  border-radius: 0px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #1d1f21;
+}
+
+/* Gold shimmer animation */
+@keyframes goldShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.gold-gradient-text {
+  background: linear-gradient(90deg, #d4af37 0%, #fdf3cd 50%, #d4af37 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: goldShimmer 4s linear infinite;
+}
+
+/* Hairline border */
+.border-hairline {
+  border-width: 1px;
+  border-color: rgba(29, 31, 33, 0.08);
+}
+
+.border-hairline-dark {
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.12);
+}

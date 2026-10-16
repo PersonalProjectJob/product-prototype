@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+_PROGRESS.md
+_DONE.md
+
+# Temporary scrape & scratch files
+benthanh_sample.html
+benthanh_texts.txt
+decoded_chunk_*.json
+sample_product.html
+sample_rolex_product.json
+all_product_urls.json
+
