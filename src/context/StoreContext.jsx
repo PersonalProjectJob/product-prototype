@@ -668,7 +668,6 @@ export function StoreProvider({ children }) {
     setLastOrder(newOrder);
     localStorage.setItem('cw_last_order', JSON.stringify(newOrder));
     clearCart();
-    setIsCheckoutOpen(false);
     return newOrder;
   };
 
@@ -680,6 +679,10 @@ export function StoreProvider({ children }) {
     setWhatsappNumberState(getStoreWhatsAppNumber());
   };
 
+  const getWhatsAppContactUrl = (customMessage = '') => {
+    return generateWhatsAppUrl(customMessage, whatsappNumber);
+  };
+
   const sendOrderToWhatsApp = (orderData) => {
     const message = buildWhatsAppOrderMessage({
       orderId: orderData.orderId,
@@ -689,13 +692,61 @@ export function StoreProvider({ children }) {
       totalUSD: orderData.totalUSD,
       notes: orderData.notes,
       coupon: orderData.coupon || appliedCoupon,
-      paymentMethod: orderData.paymentMethod || 'WhatsApp VIP Concierge',
       shippingFee: orderData.shippingFee ?? (freeShippingUnlocked ? 0 : 35)
     });
     return openWhatsAppChat(message, whatsappNumber);
   };
 
-  const sendQuickProductToWhatsApp = ({ watch, variantName, variantPrice, quantity = 1, customer = {}, notes = '' }) => {
+  const sendQuickProductToWhatsApp = (watchOrOptions, variantNameArg, variantPriceArg, quantityArg = 1) => {
+    let watch = null;
+    let variantName = 'VS / Clean 1:1 Super Clone';
+    let variantPrice = 1199;
+    let quantity = 1;
+    let customer = {};
+    let notes = '';
+
+    if (watchOrOptions && typeof watchOrOptions === 'object' && ('watch' in watchOrOptions || 'customer' in watchOrOptions)) {
+      watch = watchOrOptions.watch;
+      variantName = watchOrOptions.variantName || watch?.variant2Name || 'VS / Clean 1:1 Super Clone';
+      variantPrice = Number(watchOrOptions.variantPrice || watch?.variant2Price || watch?.priceUSD || 1199);
+      quantity = Number(watchOrOptions.quantity || 1);
+      customer = watchOrOptions.customer || {};
+      notes = watchOrOptions.notes || '';
+    } else {
+      watch = watchOrOptions;
+      variantName = variantNameArg || watch?.variant2Name || 'VS / Clean 1:1 Super Clone';
+      variantPrice = Number(variantPriceArg || watch?.variant2Price || watch?.priceUSD || 1199);
+      quantity = Number(quantityArg || 1);
+    }
+
+    if (!watch) return '';
+
+    const hasCustomerInfo = Boolean(customer?.fullName?.trim() && customer?.phone?.trim());
+    if (!hasCustomerInfo) {
+      // Ensure product is in cart and open OnePageCheckout so customer fills in their info first
+      setCart((prev) => {
+        const existing = prev.find(
+          (item) => item.product.id === watch.id && item.variantName === variantName
+        );
+        if (existing) {
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            product: watch,
+            variantName,
+            priceUSD: variantPrice,
+            quantity
+          }
+        ];
+      });
+      setQuickViewProduct(null);
+      setIsCartOpen(false);
+      setIsCheckoutOpen(true);
+      return '';
+    }
+
     const message = buildWhatsAppQuickProductMessage({
       watch,
       variantName,
@@ -775,6 +826,7 @@ export function StoreProvider({ children }) {
         setSearchQuery,
         whatsappNumber,
         updateWhatsappNumber,
+        getWhatsAppContactUrl,
         sendOrderToWhatsApp,
         sendQuickProductToWhatsApp
       }}

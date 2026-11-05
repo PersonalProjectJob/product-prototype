@@ -3,8 +3,10 @@ import { useStore } from '../context/StoreContext';
 import { Star, ShieldCheck, MessageCircle } from 'lucide-react';
 
 export default function CustomerReviewsProofSection() {
-  const { whatsappNumber } = useStore();
-  const phone = whatsappNumber || '84900000000';
+  const { getWhatsAppContactUrl } = useStore();
+  const whatsappUrl = getWhatsAppContactUrl
+    ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi muốn xem thêm video 4K QC!')
+    : 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
   return (
     <section id="customer-reviews" className="py-20 sm:py-24 bg-white">
       <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -50,7 +52,7 @@ export default function CustomerReviewsProofSection() {
           </div>
 
           <a
-            href={`https://wa.me/${phone}?text=${encodeURIComponent('Hi, can I see live QC videos for available watches?')}`}
+            href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-[#008A38] hover:bg-[#00742f] text-white text-xs sm:text-sm font-semibold px-6 py-3 rounded-full shadow-sm transition-all duration-200 hover:shadow-md flex-shrink-0"

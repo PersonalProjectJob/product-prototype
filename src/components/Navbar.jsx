@@ -15,7 +15,7 @@ export default function Navbar() {
     setIsTrackingOpen,
     setIsAntiScamOpen,
     setIsAdminOpen,
-    whatsappNumber,
+    getWhatsAppContactUrl,
     navigateToHome,
     navigateToBrands
   } = useStore();
@@ -198,7 +198,7 @@ export default function Navbar() {
 
             {/* Message Store CTA Button (Figma Button/Main) */}
             <a
-              href={`https://wa.me/${whatsappNumber || '84900000000'}?text=${encodeURIComponent('Hi, I am interested in Ben Thanh Luxury Watches')}`}
+              href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/qr/3DEQ3BJ6O2P5P1'}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-[#008A38] hover:bg-[#00742f] text-white px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm font-semibold shadow-sm transition-all duration-200 hover:shadow-md"
@@ -311,7 +311,7 @@ export default function Navbar() {
 
             <div className="pt-2">
               <a
-                href={`https://wa.me/${whatsappNumber || '84900000000'}?text=${encodeURIComponent('Hi, I am interested in Ben Thanh Luxury Watches')}`}
+                href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/qr/3DEQ3BJ6O2P5P1'}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full flex items-center justify-center gap-2 bg-[#008A38] text-white py-3 rounded-xl font-semibold text-sm"

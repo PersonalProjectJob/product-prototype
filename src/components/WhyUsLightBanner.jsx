@@ -3,8 +3,10 @@ import { useStore } from '../context/StoreContext';
 import { MessageCircle } from 'lucide-react';
 
 export default function WhyUsLightBanner() {
-  const { whatsappNumber } = useStore();
-  const phone = whatsappNumber || '84900000000';
+  const { getWhatsAppContactUrl } = useStore();
+  const whatsappUrl = getWhatsAppContactUrl
+    ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi muốn tư vấn đồng hồ chế tác 1:1')
+    : 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
 
   return (
     <section id="why-us-light" className="py-12 bg-white">
@@ -23,7 +25,7 @@ export default function WhyUsLightBanner() {
             {/* Clickable Overlay for the WhatsApp CTA button in Figma */}
             <div className="absolute right-[6%] md:right-[10%] bottom-[16%] md:bottom-[22%]">
               <a
-                href={`https://wa.me/${phone}?text=${encodeURIComponent('Hi, I want to know more about your 1:1 luxury replica watches')}`}
+                href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2.5 bg-white hover:bg-neutral-50 text-[#008A38] px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-full text-xs sm:text-sm font-semibold shadow-md transition-all duration-200 hover:shadow-lg hover:scale-105"

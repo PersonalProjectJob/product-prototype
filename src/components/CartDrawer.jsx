@@ -48,15 +48,8 @@ export default function CartDrawer() {
   };
 
   const handleOrderViaWhatsApp = () => {
-    sendOrderToWhatsApp({
-      orderId: `CW-${Math.floor(100000 + Math.random() * 900000)}`,
-      items: cart,
-      totalUSD: finalTotalUSD + (freeShippingUnlocked ? 0 : 35),
-      totalFormatted: formatPrice(finalTotalUSD + (freeShippingUnlocked ? 0 : 35)),
-      coupon: appliedCoupon,
-      shippingFee: freeShippingUnlocked ? 0 : 35,
-      notes: orderNotes
-    });
+    setIsCartOpen(false);
+    setIsCheckoutOpen(true);
   };
 
   return (

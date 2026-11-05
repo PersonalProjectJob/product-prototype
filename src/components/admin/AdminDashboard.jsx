@@ -91,7 +91,7 @@ export default function AdminDashboard() {
   // Modals & Panels
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [tempSheetId, setTempSheetId] = useState(googleSheetId);
-  const [tempWhatsapp, setTempWhatsapp] = useState(whatsappNumber || '84900000000');
+  const [tempWhatsapp, setTempWhatsapp] = useState(whatsappNumber || '');
   const [editingProduct, setEditingProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -262,7 +262,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     const clean = extractSheetId(tempSheetId);
     setGoogleSheetId(clean);
-    if (tempWhatsapp && updateWhatsappNumber) {
+    if (updateWhatsappNumber) {
       updateWhatsappNumber(tempWhatsapp);
     }
     setIsSettingsOpen(false);
@@ -819,17 +819,17 @@ export default function AdminDashboard() {
             <form onSubmit={handleSaveSheetSettings} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1">
-                  Sales WhatsApp Phone Number (E.164 without +, e.g. 84900000000):
+                  Sales WhatsApp Phone Number (Để trống để dùng Mã QR Thanh Phuong Luxury Watch):
                 </label>
                 <input
                   type="text"
                   value={tempWhatsapp}
                   onChange={(e) => setTempWhatsapp(e.target.value)}
-                  placeholder="e.g. 84900000000"
+                  placeholder="Để trống = dùng Mã QR (https://wa.me/qr/3DEQ3BJ6O2P5P1) hoặc nhập SĐT"
                   className="w-full p-2.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
                 />
                 <p className="text-[11px] text-obsidian-800/60 mt-1">
-                  All customer 1-click orders and VIP inquiries will be dispatched directly to this WhatsApp phone.
+                  Mặc định sử dụng Mã QR Thanh Phuong Luxury Watch. Nếu nhập số điện thoại sẽ mở qua wa.me/&lt;số&gt;.
                 </p>
               </div>
 

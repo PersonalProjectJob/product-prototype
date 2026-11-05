@@ -3,8 +3,8 @@ import { useStore } from '../context/StoreContext';
 import { ShieldAlert, Compass, MessageCircle } from 'lucide-react';
 
 export default function Footer() {
-  const { setIsAntiScamOpen, setIsTrackingOpen, setSelectedBrand, whatsappNumber } = useStore();
-  const phone = whatsappNumber || '84900000000';
+  const { setIsAntiScamOpen, setIsTrackingOpen, setSelectedBrand, getWhatsAppContactUrl } = useStore();
+  const whatsappUrl = getWhatsAppContactUrl ? getWhatsAppContactUrl() : 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
 
   const handleBrandClick = (brand) => {
     setSelectedBrand(brand);
@@ -86,7 +86,7 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href={`https://wa.me/${phone}`}
+                  href={whatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-[#008A38] transition-colors flex items-center gap-1"
