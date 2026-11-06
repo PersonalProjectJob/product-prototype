@@ -6,7 +6,7 @@ export default function CustomerReviewsProofSection() {
   const { getWhatsAppContactUrl } = useStore();
   const whatsappUrl = getWhatsAppContactUrl
     ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi muốn xem thêm video 4K QC!')
-    : 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
+    : 'https://wa.me/84977889986';
   return (
     <section id="customer-reviews" className="py-20 sm:py-24 bg-white">
       <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8">

@@ -12,10 +12,11 @@ import {
 import { useStore } from '../context/StoreContext';
 import {
   WHATSAPP_CONTACT_NAME,
-  DEFAULT_WHATSAPP_QR_URL,
   WHATSAPP_QR_CODE_IMAGE,
   WHATSAPP_QR_CARD_IMAGE,
+  formatWhatsAppDisplayPhone,
   buildWhatsAppOrderMessage,
+  generateWhatsAppUrl,
   copyOrderMessageToClipboard
 } from '../services/whatsappService';
 import WhatsAppIcon from './common/WhatsAppIcon';
@@ -32,8 +33,10 @@ export default function OnePageCheckout() {
     currency,
     formatPrice,
     placeOrder,
+    whatsappNumber,
     sendOrderToWhatsApp
   } = useStore();
+  const displayWhatsappPhone = formatWhatsAppDisplayPhone(whatsappNumber);
 
   // Form State (No paymentMethod — only Customer Info & Product Info)
   const [formData, setFormData] = useState({
@@ -218,14 +221,14 @@ export default function OnePageCheckout() {
               <div className="md:col-span-5 bg-emerald-50/60 border border-[#25D366]/40 rounded-xl p-4 flex flex-col items-center justify-between text-center space-y-3">
                 <div className="space-y-1">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#25D366] text-white text-[10px] font-bold uppercase tracking-wider">
-                    <WhatsAppIcon className="w-3 h-3" />
+                    <WhatsAppIcon className="w-3 h-3 flex-shrink-0" />
                     <span>Mã QR WhatsApp Owner</span>
                   </span>
                   <h4 className="text-sm font-bold text-obsidian-950 pt-1">
                     {WHATSAPP_CONTACT_NAME}
                   </h4>
-                  <p className="text-[11px] text-obsidian-800/60">
-                    Người liên hệ trên WhatsApp
+                  <p className="text-[11px] font-mono font-bold text-[#008A38]">
+                    {displayWhatsappPhone}
                   </p>
                 </div>
 
@@ -271,27 +274,27 @@ export default function OnePageCheckout() {
 
                 {/* Formatted WhatsApp Message Box */}
                 <div className="flex-1 flex flex-col border border-obsidian-800/15 rounded-xl overflow-hidden bg-white">
-                  <div className="bg-obsidian-950 text-white px-3.5 py-2 flex items-center justify-between text-[11px]">
-                    <span className="font-semibold">Nội dung đơn hàng gửi qua WhatsApp:</span>
+                  <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+                    <span className="font-semibold truncate min-w-0">Nội dung đơn hàng WhatsApp:</span>
                     <button
                       type="button"
                       onClick={() => handleCopyMessage(liveOrderPreviewMessage)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
                     >
                       {copiedMessage ? (
                         <>
-                          <Check className="w-3 h-3 text-emerald-400" />
+                          <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
                           <span className="text-emerald-300">Đã sao chép</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="w-3 h-3" />
+                          <Copy className="w-3 h-3 flex-shrink-0" />
                           <span>Sao chép tin nhắn</span>
                         </>
                       )}
                     </button>
                   </div>
-                  <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap max-h-40 overflow-y-auto bg-neutral-50 leading-relaxed">
+                  <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap break-words max-h-40 overflow-y-auto overflow-x-hidden bg-neutral-50 leading-relaxed">
                     {liveOrderPreviewMessage}
                   </pre>
                 </div>
@@ -314,16 +317,17 @@ export default function OnePageCheckout() {
                     notes: orderCompletedData.customer.notes
                   });
                 }}
-                className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md transition-all"
+                className="w-full px-4 py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider flex items-center justify-center gap-2 shadow-md transition-all whitespace-nowrap"
               >
-                <WhatsAppIcon className="w-4 h-4" />
-                <span>Mở WhatsApp ({WHATSAPP_CONTACT_NAME}) &amp; Gửi Lại Đơn Hàng</span>
+                <WhatsAppIcon className="w-4 h-4 flex-shrink-0" />
+                <span className="sm:hidden">Mở WhatsApp ({displayWhatsappPhone}) &bull; Gửi Đơn</span>
+                <span className="hidden sm:inline">Mở WhatsApp ({WHATSAPP_CONTACT_NAME} &bull; {displayWhatsappPhone}) &amp; Gửi Lại Đơn Hàng</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="w-full py-3 bg-obsidian-950 hover:bg-obsidian-800 text-white font-bold text-xs uppercase tracking-wider transition-colors"
+                className="w-full px-4 py-3 bg-obsidian-950 hover:bg-obsidian-800 text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider transition-colors whitespace-nowrap"
               >
                 Quay Lại Cửa Hàng / Return To Storefront
               </button>
@@ -483,7 +487,7 @@ export default function OnePageCheckout() {
                   <span>Thông Tin Liên Hệ WhatsApp &bull; {WHATSAPP_CONTACT_NAME}</span>
                 </h3>
 
-                <div className="border-2 border-[#25D366] bg-emerald-50/40 p-4 space-y-4">
+                <div className="border-2 border-[#25D366] bg-emerald-50/40 p-3 sm:p-4 space-y-4">
                   {/* Top Row: QR Code Card + Owner Contact Info */}
                   <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 border border-emerald-200">
                     <div className="w-28 h-28 flex-shrink-0 bg-white border border-obsidian-800/10 p-1.5 rounded-lg shadow-xs flex items-center justify-center">
@@ -496,27 +500,27 @@ export default function OnePageCheckout() {
 
                     <div className="flex-1 text-center sm:text-left space-y-1.5">
                       <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#25D366]/15 text-[#008A38] text-[10px] font-bold uppercase tracking-wider">
-                        <QrCode className="w-3 h-3" />
+                        <QrCode className="w-3 h-3 flex-shrink-0" />
                         <span>Kênh Chốt Đơn Trực Tiếp Với Owner</span>
                       </div>
 
                       <h4 className="text-sm font-extrabold text-obsidian-950">
-                        {WHATSAPP_CONTACT_NAME}
+                        {WHATSAPP_CONTACT_NAME} <span className="font-mono text-[#008A38]">({displayWhatsappPhone})</span>
                       </h4>
 
                       <p className="text-[11px] text-obsidian-800/70 leading-relaxed">
-                        Khi bạn bấm <strong>Hoàn Tất Đặt Hàng</strong>, hệ thống sẽ tự động đẩy toàn bộ <strong>Thông tin khách hàng</strong> và <strong>Thông tin sản phẩm mua</strong> qua WhatsApp để Owner liên hệ tư vấn &amp; gửi video kiểm định 4K QC.
+                        Khi bạn bấm <strong>Hoàn Tất Đặt Hàng</strong>, hệ thống sẽ tự động đẩy toàn bộ <strong>Thông tin khách hàng</strong> và <strong>Thông tin sản phẩm mua</strong> tới số WhatsApp <strong>{displayWhatsappPhone}</strong> để Owner liên hệ tư vấn &amp; gửi video kiểm định 4K QC.
                       </p>
 
                       <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-2">
                         <a
-                          href={DEFAULT_WHATSAPP_QR_URL}
+                          href={generateWhatsAppUrl(liveOrderPreviewMessage, whatsappNumber)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#008A38] hover:underline"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#008A38] hover:underline whitespace-nowrap"
                         >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>Mở liên kết mã QR WhatsApp</span>
+                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                          <span>Mở chat WhatsApp: {displayWhatsappPhone}</span>
                         </a>
                       </div>
                     </div>
@@ -524,30 +528,33 @@ export default function OnePageCheckout() {
 
                   {/* Live Preview of Customer + Order Info to be pushed to WhatsApp */}
                   <div className="border border-emerald-200 bg-white overflow-hidden">
-                    <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between text-[11px]">
-                      <span className="font-semibold flex items-center gap-1.5">
-                        <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366]" />
-                        <span>Bản xem trước tin nhắn đơn hàng gửi qua WhatsApp:</span>
+                    <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+                      <span className="font-semibold flex items-center gap-1.5 min-w-0">
+                        <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366] flex-shrink-0" />
+                        <span className="truncate">
+                          <span className="sm:hidden">Xem trước tin nhắn:</span>
+                          <span className="hidden sm:inline">Bản xem trước tin nhắn đơn hàng gửi qua WhatsApp:</span>
+                        </span>
                       </span>
                       <button
                         type="button"
                         onClick={() => handleCopyMessage(liveOrderPreviewMessage)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
                       >
                         {copiedMessage ? (
                           <>
-                            <Check className="w-3 h-3 text-emerald-400" />
+                            <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
                             <span className="text-emerald-300">Đã copy!</span>
                           </>
                         ) : (
                           <>
-                            <Copy className="w-3 h-3" />
+                            <Copy className="w-3 h-3 flex-shrink-0" />
                             <span>Copy nội dung</span>
                           </>
                         )}
                       </button>
                     </div>
-                    <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap max-h-36 overflow-y-auto bg-neutral-50/80 leading-relaxed">
+                    <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap break-words max-h-36 overflow-y-auto overflow-x-hidden bg-neutral-50/80 leading-relaxed">
                       {liveOrderPreviewMessage}
                     </pre>
                   </div>
@@ -644,13 +651,16 @@ export default function OnePageCheckout() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 bg-[#25D366] hover:bg-[#20ba59] text-white font-extrabold text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                  className="w-full px-4 py-3.5 sm:py-4 bg-[#25D366] hover:bg-[#20ba59] text-white font-extrabold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider transition-all shadow-xl flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 cursor-pointer"
                 >
-                  <WhatsAppIcon className="w-4 h-4" />
+                  <WhatsAppIcon className="w-4 h-4 flex-shrink-0" />
                   {isSubmitting ? (
-                    <span>Đang đẩy đơn hàng sang WhatsApp...</span>
+                    <span>Đang đẩy đơn sang WhatsApp...</span>
                   ) : (
-                    <span>Hoàn Tất Đặt Hàng &bull; Gửi Qua WhatsApp</span>
+                    <>
+                      <span className="sm:hidden">Hoàn Tất Đặt Hàng &bull; Gửi WhatsApp</span>
+                      <span className="hidden sm:inline">Hoàn Tất Đặt Hàng &bull; Gửi Qua WhatsApp</span>
+                    </>
                   )}
                 </button>
               </div>

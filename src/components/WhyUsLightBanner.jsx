@@ -6,7 +6,7 @@ export default function WhyUsLightBanner() {
   const { getWhatsAppContactUrl } = useStore();
   const whatsappUrl = getWhatsAppContactUrl
     ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi muốn tư vấn đồng hồ chế tác 1:1')
-    : 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
+    : 'https://wa.me/84977889986';
 
   return (
     <section id="why-us-light" className="py-12 bg-white">

@@ -2,6 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { extractSheetId } from '../../services/googleSheetsService';
 import {
+  WHATSAPP_CONTACT_NAME,
+  DEFAULT_WHATSAPP_NUMBER,
+  normalizeWhatsAppPhone,
+  formatWhatsAppDisplayPhone,
+  generateWhatsAppUrl
+} from '../../services/whatsappService';
+import WhatsAppIcon from '../common/WhatsAppIcon';
+import {
   Lock,
   Unlock,
   KeyRound,
@@ -25,7 +33,9 @@ import {
   ChevronRight,
   Sparkles,
   Database,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Phone,
+  RotateCcw
 } from 'lucide-react';
 
 const DEFAULT_PIN = '888888';
@@ -90,13 +100,22 @@ export default function AdminDashboard() {
 
   // Modals & Panels
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isWhatsappModalOpen, setIsWhatsappModalOpen] = useState(false);
   const [tempSheetId, setTempSheetId] = useState(googleSheetId);
-  const [tempWhatsapp, setTempWhatsapp] = useState(whatsappNumber || '');
+  const [tempWhatsapp, setTempWhatsapp] = useState(whatsappNumber || DEFAULT_WHATSAPP_NUMBER);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [csvFileContent, setCsvFileContent] = useState('');
   const [actionNotice, setActionNotice] = useState(null);
+
+  useEffect(() => {
+    setTempWhatsapp(whatsappNumber || DEFAULT_WHATSAPP_NUMBER);
+  }, [whatsappNumber]);
+
+  const activeFormattedPhone = formatWhatsAppDisplayPhone(whatsappNumber);
+  const previewCleanPhone = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
+  const previewFormattedPhone = formatWhatsAppDisplayPhone(previewCleanPhone);
 
   // Inline price edit state
   const [inlineEditing, setInlineEditing] = useState(null); // { id: '...', field: 'variant1Price' | 'variant2Price', value: 700 }
@@ -257,14 +276,36 @@ export default function AdminDashboard() {
     }
   };
 
+  // Save Sales WhatsApp Phone directly
+  const handleSaveWhatsappDirect = (e) => {
+    if (e) e.preventDefault();
+    const normalized = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
+    if (updateWhatsappNumber) {
+      updateWhatsappNumber(normalized);
+    }
+    setTempWhatsapp(normalized);
+    setIsWhatsappModalOpen(false);
+    showNotification(`Đã cập nhật SĐT WhatsApp chốt đơn: ${formatWhatsAppDisplayPhone(normalized)}`);
+  };
+
+  const handleResetWhatsappDefault = () => {
+    if (updateWhatsappNumber) {
+      updateWhatsappNumber(DEFAULT_WHATSAPP_NUMBER);
+    }
+    setTempWhatsapp(DEFAULT_WHATSAPP_NUMBER);
+    showNotification(`Đã khôi phục SĐT mặc định: ${formatWhatsAppDisplayPhone(DEFAULT_WHATSAPP_NUMBER)}`);
+  };
+
   // Save Google Sheet ID & Sales WhatsApp Phone
   const handleSaveSheetSettings = async (e) => {
     e.preventDefault();
     const clean = extractSheetId(tempSheetId);
     setGoogleSheetId(clean);
+    const normalizedWa = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
     if (updateWhatsappNumber) {
-      updateWhatsappNumber(tempWhatsapp);
+      updateWhatsappNumber(normalizedWa);
     }
+    setTempWhatsapp(normalizedWa);
     setIsSettingsOpen(false);
     if (clean) {
       await syncWithGoogleSheet(clean);
@@ -286,29 +327,29 @@ export default function AdminDashboard() {
       )}
 
       {/* Top Navbar */}
-      <div className="bg-obsidian-950 text-white px-4 sm:px-8 py-3.5 border-b border-white/10 flex items-center justify-between sticky top-0 z-30 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="bg-gold-500/20 text-gold-400 p-2 border border-gold-500/30">
+      <div className="bg-obsidian-950 text-white px-3 sm:px-8 py-3 sm:py-3.5 border-b border-white/10 flex items-center justify-between gap-2 sticky top-0 z-30 shadow-md">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="bg-gold-500/20 text-gold-400 p-2 border border-gold-500/30 flex-shrink-0">
             <Lock className="w-4 h-4 text-gold-400" />
           </div>
-          <div>
-            <h1 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
-              <span>CloneWatches SaaS Admin CMS</span>
-              <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 font-mono">
+          <div className="min-w-0">
+            <h1 className="text-xs sm:text-sm font-bold uppercase tracking-wider flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="truncate">CloneWatches Admin CMS</span>
+              <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 font-mono whitespace-nowrap flex-shrink-0">
                 v2.0 Live
               </span>
             </h1>
-            <p className="text-[11px] text-white/50 font-mono">
-              Hybrid Frontend &bull; Google Sheets Database SSoT &bull; Zero Backend
+            <p className="text-[10px] sm:text-[11px] text-white/50 font-mono truncate">
+              Hybrid Frontend &bull; Google Sheets SSoT
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
           {isAuthenticated && (
             <button
               onClick={handleLogout}
-              className="text-xs text-white/60 hover:text-white px-2.5 py-1 border border-white/10 hover:border-white/30 transition-colors"
+              className="text-[11px] sm:text-xs text-white/70 hover:text-white px-2.5 py-1.5 border border-white/15 hover:border-white/30 transition-colors whitespace-nowrap"
             >
               Sign Out
             </button>
@@ -316,7 +357,7 @@ export default function AdminDashboard() {
 
           <button
             onClick={handleCloseAdmin}
-            className="p-1.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/15 transition-colors border border-white/10"
+            className="p-1.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/15 transition-colors border border-white/10 flex-shrink-0"
             title="Close Admin Panel"
           >
             <X className="w-5 h-5" />
@@ -391,7 +432,7 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             
             {/* Top Metrics Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm">
                 <div className="flex items-center justify-between text-xs text-obsidian-800/60 uppercase font-semibold">
                   <span>Total Watches</span>
@@ -446,6 +487,24 @@ export default function AdminDashboard() {
                 </div>
                 <div className="text-[10px] text-obsidian-800/60 font-mono mt-1 truncate">
                   {lastSyncTime ? `Synced: ${lastSyncTime}` : 'Offline Cached Data'}
+                </div>
+              </div>
+
+              <div
+                onClick={() => setIsWhatsappModalOpen(true)}
+                className="col-span-2 md:col-span-1 bg-emerald-50/40 hover:bg-emerald-50 border border-[#25D366]/40 p-4 shadow-sm cursor-pointer transition-colors group"
+                title="Bấm để cài đặt nhanh số điện thoại WhatsApp nhận đơn hàng"
+              >
+                <div className="flex items-center justify-between text-xs text-[#008A38] uppercase font-bold">
+                  <span>WhatsApp Owner</span>
+                  <WhatsAppIcon className="w-4 h-4 text-[#25D366]" />
+                </div>
+                <div className="text-sm sm:text-base font-extrabold font-mono text-obsidian-950 mt-1.5 truncate">
+                  {activeFormattedPhone}
+                </div>
+                <div className="text-[10px] text-[#008A38] font-semibold mt-1 flex items-center justify-between gap-1">
+                  <span className="truncate">{WHATSAPP_CONTACT_NAME}</span>
+                  <span className="underline group-hover:text-obsidian-950 flex-shrink-0">Sửa SĐT &rarr;</span>
                 </div>
               </div>
             </div>
@@ -515,6 +574,15 @@ export default function AdminDashboard() {
                 </button>
 
                 <button
+                  onClick={() => setIsWhatsappModalOpen(true)}
+                  className="px-3.5 py-2 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#008A38] text-xs font-bold uppercase tracking-wider border border-[#25D366]/50 transition-all flex items-center gap-1.5 shadow-sm"
+                  title="Cài đặt số điện thoại WhatsApp nhận đơn hàng"
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5 text-[#008A38]" />
+                  <span>WhatsApp Setup ({activeFormattedPhone})</span>
+                </button>
+
+                <button
                   onClick={() => setIsSettingsOpen(true)}
                   className="px-3.5 py-2 bg-gold-50 hover:bg-gold-100 text-gold-950 text-xs font-bold uppercase tracking-wider border border-gold-300 transition-all flex items-center gap-1.5"
                 >
@@ -540,6 +608,73 @@ export default function AdminDashboard() {
               </div>
 
             </div>
+
+            {/* Quick Inline WhatsApp Phone Setup Bar */}
+            <form
+              onSubmit={handleSaveWhatsappDirect}
+              className="bg-emerald-50/50 border border-[#25D366]/40 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3"
+            >
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <WhatsAppIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-obsidian-950">
+                      Cài Đặt Nhanh Số Điện Thoại WhatsApp Nhận Đơn Hàng
+                    </span>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#25D366]/20 text-[#008A38]">
+                      Đang dùng: {activeFormattedPhone}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-obsidian-800/70 mt-0.5">
+                    Nhập SĐT dạng <code className="font-mono bg-white px-1 border border-obsidian-800/10">0977889986</code> hoặc <code className="font-mono bg-white px-1 border border-obsidian-800/10">+84 97 788 99 86</code> — hệ thống tự động chuẩn hóa sang liên kết <code className="font-mono text-[#008A38]">wa.me/{previewCleanPhone}</code>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                <div className="relative flex-1 sm:w-64">
+                  <Phone className="w-3.5 h-3.5 text-obsidian-800/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={tempWhatsapp}
+                    onChange={(e) => setTempWhatsapp(e.target.value)}
+                    placeholder="VD: 0977889986 hoặc 84977889986"
+                    className="w-full bg-white border border-obsidian-800/20 focus:border-[#008A38] focus:outline-none pl-8 pr-3 py-2 text-xs font-mono font-bold text-obsidian-950"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#008A38] hover:bg-[#00742f] text-white text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Lưu SĐT</span>
+                </button>
+
+                <a
+                  href={generateWhatsAppUrl('Xin chào Thanh Phuong Luxury Watch, kiểm tra kết nối SĐT WhatsApp từ Admin!', previewCleanPhone)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 bg-white hover:bg-neutral-100 text-[#008A38] border border-[#25D366]/50 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 whitespace-nowrap"
+                  title="Mở thử khung chat WhatsApp với số điện thoại này"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Test Chat</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handleResetWhatsappDefault}
+                  className="px-2.5 py-2 bg-white hover:bg-neutral-100 text-obsidian-800/70 hover:text-obsidian-950 border border-obsidian-800/15 text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
+                  title="Khôi phục về số mặc định +84 97 788 99 86"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline">Mặc định</span>
+                </button>
+              </div>
+            </form>
 
             {/* Filters & Search Row */}
             <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
@@ -800,6 +935,106 @@ export default function AdminDashboard() {
 
       </div>
 
+      {/* ===================== DEDICATED WHATSAPP PHONE SETUP MODAL ===================== */}
+      {isWhatsappModalOpen && (
+        <div className="fixed inset-0 z-60 bg-obsidian-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white max-w-lg w-full border border-obsidian-800/20 shadow-2xl p-4 sm:p-7 space-y-4 sm:space-y-5 animate-in zoom-in-95 overflow-hidden">
+            <div className="flex items-start justify-between gap-2 border-b pb-3 border-obsidian-800/10">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded bg-[#25D366] text-white flex items-center justify-center flex-shrink-0">
+                  <WhatsAppIcon className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-xs sm:text-sm uppercase tracking-wider text-obsidian-950 leading-snug">
+                    Cài Đặt Số Điện Thoại WhatsApp Chốt Đơn
+                  </h3>
+                  <p className="text-[11px] text-obsidian-800/60 truncate">
+                    {WHATSAPP_CONTACT_NAME}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsWhatsappModalOpen(false)}
+                className="p-1 text-obsidian-800/60 hover:text-obsidian-950 flex-shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveWhatsappDirect} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1.5">
+                  Số Điện Thoại WhatsApp Nhận Đơn Hàng:
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={tempWhatsapp}
+                    onChange={(e) => setTempWhatsapp(e.target.value)}
+                    placeholder="VD: 0977889986 hoặc +84 97 788 99 86"
+                    className="w-full sm:flex-1 p-2.5 text-sm font-mono font-bold border border-obsidian-800/20 focus:border-[#008A38] focus:outline-none min-w-0"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTempWhatsapp(DEFAULT_WHATSAPP_NUMBER)}
+                    className="px-3 py-2 text-xs font-semibold border border-obsidian-800/20 hover:bg-neutral-100 text-obsidian-800 whitespace-nowrap flex-shrink-0"
+                  >
+                    Khôi phục số mặc định
+                  </button>
+                </div>
+                <p className="text-[11px] text-obsidian-800/60 mt-1.5 leading-relaxed">
+                  Bạn có thể nhập dạng <code className="font-mono bg-neutral-100 px-1">0977889986</code>, <code className="font-mono bg-neutral-100 px-1">84977889986</code> hoặc <code className="font-mono bg-neutral-100 px-1">+84 97 788 99 86</code>. Hệ thống sẽ tự động chuyển đầu <code className="font-mono">0</code> thành mã quốc tế <code className="font-mono">84</code>.
+                </p>
+              </div>
+
+              {/* Live URL & Display Preview */}
+              <div className="bg-emerald-50/60 border border-[#25D366]/40 p-3 sm:p-3.5 text-xs space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-obsidian-800/70">Hiển thị trên web &amp; Checkout:</span>
+                  <span className="font-mono font-bold text-[#008A38] whitespace-nowrap">{previewFormattedPhone}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                  <span className="text-obsidian-800/70 flex-shrink-0">Liên kết đẩy đơn trực tiếp:</span>
+                  <code className="font-mono text-[11px] bg-white px-2 py-1 border border-emerald-200 text-obsidian-950 truncate block max-w-full">
+                    https://wa.me/{previewCleanPhone}?text=...
+                  </code>
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-obsidian-800/10">
+                <a
+                  href={generateWhatsAppUrl('Xin chào Thanh Phuong Luxury Watch, kiểm tra kết nối SĐT WhatsApp!', previewCleanPhone)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-[#008A38] hover:underline whitespace-nowrap py-1"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Test mở WhatsApp ({previewFormattedPhone})</span>
+                </a>
+
+                <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsWhatsappModalOpen(false)}
+                    className="px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-obsidian-800/70 hover:text-obsidian-950 border border-obsidian-800/15 sm:border-0 whitespace-nowrap"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2.5 bg-[#008A38] hover:bg-[#00742f] text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer whitespace-nowrap"
+                  >
+                    Lưu Số Điện Thoại
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ===================== GOOGLE SHEETS SETTINGS MODAL ===================== */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-60 bg-obsidian-950/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -819,17 +1054,17 @@ export default function AdminDashboard() {
             <form onSubmit={handleSaveSheetSettings} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1">
-                  Sales WhatsApp Phone Number (Để trống để dùng Mã QR Thanh Phuong Luxury Watch):
+                  Sales WhatsApp Phone Number (Mặc định: +84 97 788 99 86 • Thanh Phuong Luxury Watch):
                 </label>
                 <input
                   type="text"
                   value={tempWhatsapp}
                   onChange={(e) => setTempWhatsapp(e.target.value)}
-                  placeholder="Để trống = dùng Mã QR (https://wa.me/qr/3DEQ3BJ6O2P5P1) hoặc nhập SĐT"
+                  placeholder="84977889986 (+84 97 788 99 86)"
                   className="w-full p-2.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
                 />
                 <p className="text-[11px] text-obsidian-800/60 mt-1">
-                  Mặc định sử dụng Mã QR Thanh Phuong Luxury Watch. Nếu nhập số điện thoại sẽ mở qua wa.me/&lt;số&gt;.
+                  Mặc định sử dụng SĐT +84 97 788 99 86 (Thanh Phuong Luxury Watch) để mở trực tiếp khung chat kèm nội dung đơn hàng.
                 </p>
               </div>
 
