@@ -10,18 +10,39 @@ export const WHATSAPP_CONTACT_NAME = 'Thanh Phuong Luxury Watch';
 export const DEFAULT_WHATSAPP_QR_URL = 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
 export const WHATSAPP_QR_CODE_IMAGE = '/figma-assets/whatsapp-qr-code.png';
 export const WHATSAPP_QR_CARD_IMAGE = '/figma-assets/whatsapp-qr-card.png';
-export const DEFAULT_WHATSAPP_NUMBER = ''; // Uses QR link by default until a phone number is set
+export const DEFAULT_WHATSAPP_NUMBER = '84977889986';
+export const DEFAULT_WHATSAPP_DISPLAY_PHONE = '+84 97 788 99 86';
 
 /**
- * Get configured sales WhatsApp number (empty string means use QR code link)
+ * Get configured sales WhatsApp number (defaults to Owner phone +84 97 788 99 86)
+ * Automatically normalizes Vietnamese leading '0' (e.g. '0977889986') to '84977889986'
  */
+export function normalizeWhatsAppPhone(input) {
+  let clean = String(input || '').replace(/[^0-9]/g, '');
+  if (!clean || clean === '84900000000') {
+    return '';
+  }
+  if (clean.startsWith('0') && clean.length >= 9 && clean.length <= 11) {
+    clean = '84' + clean.slice(1);
+  }
+  return clean;
+}
+
+export function formatWhatsAppDisplayPhone(phoneInput) {
+  const clean = normalizeWhatsAppPhone(phoneInput) || DEFAULT_WHATSAPP_NUMBER;
+  if (clean.startsWith('84') && clean.length === 11) {
+    // e.g. 84977889986 -> +84 97 788 99 86
+    return `+84 ${clean.slice(2, 4)} ${clean.slice(4, 7)} ${clean.slice(7, 9)} ${clean.slice(9)}`;
+  }
+  return `+${clean}`;
+}
+
 export function getStoreWhatsAppNumber() {
   try {
     const saved = localStorage.getItem('cw_whatsapp_number');
     if (saved && saved.trim()) {
-      const clean = saved.replace(/[^0-9]/g, '');
-      // Ignore legacy placeholder dummy number so QR link is used by default
-      if (clean && clean !== '84900000000') {
+      const clean = normalizeWhatsAppPhone(saved);
+      if (clean) {
         return clean;
       }
     }
@@ -36,8 +57,8 @@ export function getStoreWhatsAppNumber() {
  */
 export function setStoreWhatsAppNumber(phoneNumber) {
   try {
-    const clean = String(phoneNumber || '').replace(/[^0-9]/g, '');
-    if (clean && clean !== '84900000000') {
+    const clean = normalizeWhatsAppPhone(phoneNumber);
+    if (clean) {
       localStorage.setItem('cw_whatsapp_number', clean);
     } else {
       localStorage.removeItem('cw_whatsapp_number');
@@ -212,22 +233,18 @@ export function buildWhatsAppQuickProductMessage({
 }
 
 /**
- * Generate full WhatsApp URL (supports both phone number and QR code link fallback)
+ * Generate full WhatsApp URL:
+ * Always targets the store owner's phone number directly (https://wa.me/84977889986?text=...)
+ * so mobile WhatsApp opens the chat with +84 97 788 99 86 instead of the "Gửi đến" contact picker.
  */
 export function generateWhatsAppUrl(message = '', customPhone = null) {
-  const rawPhone = (customPhone !== null ? customPhone : getStoreWhatsAppNumber()) || '';
-  const phone = String(rawPhone).replace(/[^0-9]/g, '');
+  const rawPhone = (customPhone !== null ? customPhone : getStoreWhatsAppNumber()) || DEFAULT_WHATSAPP_NUMBER;
+  const phone = normalizeWhatsAppPhone(rawPhone) || DEFAULT_WHATSAPP_NUMBER;
   const encodedText = message ? encodeURIComponent(message) : '';
 
-  if (phone && phone !== '84900000000') {
-    return encodedText
-      ? `https://wa.me/${phone}?text=${encodedText}`
-      : `https://wa.me/${phone}`;
-  }
-
   return encodedText
-    ? `${DEFAULT_WHATSAPP_QR_URL}?text=${encodedText}`
-    : DEFAULT_WHATSAPP_QR_URL;
+    ? `https://wa.me/${phone}?text=${encodedText}`
+    : `https://wa.me/${phone}`;
 }
 
 /**

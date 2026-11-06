@@ -285,18 +285,19 @@ export default function CartDrawer() {
               <button
                 type="button"
                 onClick={handleOrderViaWhatsApp}
-                className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-md transition-all"
+                className="w-full px-4 py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider flex items-center justify-center gap-2 shadow-md transition-all whitespace-nowrap"
               >
-                <WhatsAppIcon className="w-4 h-4" />
-                <span>Order Entire Bag via WhatsApp with Sale</span>
+                <WhatsAppIcon className="w-4 h-4 flex-shrink-0" />
+                <span className="sm:hidden">Order Bag via WhatsApp</span>
+                <span className="hidden sm:inline">Order Entire Bag via WhatsApp with Sale</span>
               </button>
 
               <button
                 onClick={handleCheckoutClick}
-                className="w-full py-3.5 bg-obsidian-950 hover:bg-obsidian-800 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all group"
+                className="w-full px-4 py-3.5 bg-obsidian-950 hover:bg-obsidian-800 text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all group whitespace-nowrap"
               >
                 <span>Proceed To One-Page Checkout</span>
-                <ArrowRight className="w-4 h-4 text-gold-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 text-gold-400 group-hover:translate-x-1 transition-transform flex-shrink-0" />
               </button>
             </div>
 

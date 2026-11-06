@@ -18,6 +18,7 @@ import Footer from './components/Footer';
 // Modals and Drawers (Full E-Commerce Sales Funnel)
 import ProductQuickViewModal from './components/ProductQuickViewModal';
 import CartDrawer from './components/CartDrawer';
+import FloatingCartButton from './components/FloatingCartButton';
 import OnePageCheckout from './components/OnePageCheckout';
 import OrderTrackingModal from './components/OrderTrackingModal';
 import AntiScamNoticeModal from './components/AntiScamNoticeModal';
@@ -103,6 +104,7 @@ function StorefrontContent() {
       <Footer />
 
       {/* Full E-Commerce Funnel Modals & Drawers */}
+      <FloatingCartButton />
       <ProductQuickViewModal />
       <CartDrawer />
       <OnePageCheckout />

@@ -57,46 +57,50 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.04)] transition-all">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-16">
-        <div className="flex items-center justify-between h-20">
+      <div className="max-w-[1440px] mx-auto px-3 sm:px-8 lg:px-16">
+        <div className="flex items-center justify-between gap-2 h-16 sm:h-20">
           
-          {/* Mobile menu trigger */}
-          <div className="flex items-center md:hidden">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-gray-800 hover:text-black focus:outline-none"
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
+          {/* Left Group: Mobile menu trigger + Brand Logo */}
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+            <div className="flex items-center md:hidden flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-1.5 sm:p-2 text-gray-800 hover:text-black focus:outline-none"
+                aria-label="Toggle menu"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
+              </button>
+            </div>
 
-          {/* Brand Logo - Ben Thanh Luxury */}
-          <div className="flex-shrink-0 flex items-center">
-            <button
-              onClick={() => {
-                if (navigateToHome) navigateToHome();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="flex items-center gap-3 group text-left focus:outline-none"
-            >
-              <img
-                src="/figma-assets/benthanh-logo.png"
-                alt="BEN THANH Luxury"
-                className="h-10 w-auto object-contain transition-transform group-hover:scale-105"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
+            {/* Brand Logo - Ben Thanh Luxury */}
+            <div className="flex items-center min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (navigateToHome) navigateToHome();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-              />
-              <div className="flex flex-col">
-                <span className="font-heading tracking-widest text-lg sm:text-xl font-bold text-[#A88236] uppercase leading-tight">
-                  BEN THANH
-                </span>
-                <span className="text-[9px] tracking-[0.3em] text-[#C4A052] uppercase font-light -mt-0.5">
-                  LUXURY WATCHES
-                </span>
-              </div>
-            </button>
+                className="flex items-center gap-1.5 sm:gap-3 group text-left focus:outline-none min-w-0"
+              >
+                <img
+                  src="/figma-assets/benthanh-logo.png"
+                  alt="BEN THANH Luxury"
+                  className="h-7 sm:h-10 w-auto object-contain transition-transform group-hover:scale-105 flex-shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <div className="flex flex-col min-w-0">
+                  <span className="font-heading tracking-wider sm:tracking-widest text-xs sm:text-lg lg:text-xl font-bold text-[#A88236] uppercase leading-tight whitespace-nowrap">
+                    BEN THANH
+                  </span>
+                  <span className="text-[7px] sm:text-[9px] tracking-[0.18em] sm:tracking-[0.3em] text-[#C4A052] uppercase font-light -mt-0.5 whitespace-nowrap">
+                    LUXURY WATCHES
+                  </span>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Desktop Navigation Links */}
@@ -183,7 +187,7 @@ export default function Navbar() {
           </nav>
 
           {/* Right Action Stack: Search, Message Store CTA, Cart */}
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-4 flex-shrink-0">
             {/* Search Input */}
             <div className="relative hidden xl:block w-48">
               <input
@@ -198,28 +202,14 @@ export default function Navbar() {
 
             {/* Message Store CTA Button (Figma Button/Main) */}
             <a
-              href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/qr/3DEQ3BJ6O2P5P1'}
+              href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/84977889986'}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-[#008A38] hover:bg-[#00742f] text-white px-4 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm font-semibold shadow-sm transition-all duration-200 hover:shadow-md"
+              className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#008A38] hover:bg-[#00742f] text-white px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold shadow-sm transition-all duration-200 hover:shadow-md whitespace-nowrap flex-shrink-0"
             >
-              <MessageCircle className="w-4 h-4 fill-white" />
+              <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white flex-shrink-0" />
               <span>Message Store</span>
             </a>
-
-            {/* Cart Drawer Trigger */}
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-2.5 text-gray-800 hover:text-black hover:bg-gray-100 rounded-full transition-all"
-              aria-label="Shopping Cart"
-            >
-              <ShoppingBag className="w-5 h-5" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#008A38] text-white text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
-                  {cartCount}
-                </span>
-              )}
-            </button>
           </div>
         </div>
 
@@ -311,7 +301,7 @@ export default function Navbar() {
 
             <div className="pt-2">
               <a
-                href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/qr/3DEQ3BJ6O2P5P1'}
+                href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/84977889986'}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full flex items-center justify-center gap-2 bg-[#008A38] text-white py-3 rounded-xl font-semibold text-sm"

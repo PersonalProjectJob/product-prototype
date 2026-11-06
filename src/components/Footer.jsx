@@ -4,7 +4,7 @@ import { ShieldAlert, Compass, MessageCircle } from 'lucide-react';
 
 export default function Footer() {
   const { setIsAntiScamOpen, setIsTrackingOpen, setSelectedBrand, getWhatsAppContactUrl } = useStore();
-  const whatsappUrl = getWhatsAppContactUrl ? getWhatsAppContactUrl() : 'https://wa.me/qr/3DEQ3BJ6O2P5P1';
+  const whatsappUrl = getWhatsAppContactUrl ? getWhatsAppContactUrl() : 'https://wa.me/84977889986';
 
   const handleBrandClick = (brand) => {
     setSelectedBrand(brand);
