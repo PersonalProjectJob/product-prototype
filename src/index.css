@@ -11,6 +11,10 @@
   --color-gold-light: #f3d28a;
   --color-emerald: #0a5c3b;
   --color-crimson: #AE2238;
+  --color-success: #008A38;
+  --color-warning: #D97706;
+  --color-danger: #AE2238;
+  --color-whatsapp: #25D366;
   --font-display: 'Satoshi', 'DM Sans', sans-serif;
   --font-body: 'DM Sans', Satoshi, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;

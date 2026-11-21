@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-11-21T10:17:28.270Z",
+  "v4_products_total": 773,
+  "v4_images_total": 6870,
+  "v4_videos_total": 39,
+  "v4_aliases_total": 20,
+  "v4_nickname_evidence_total": 128,
+  "v4_with_nickname_count": 128,
+  "auto_matched_direct": 193,
+  "auto_matched_collection_or_brand": 564,
+  "auto_matched_total": 757,
+  "missing_price_total": 16,
+  "missing_brand_total": 15,
+  "legacy_hidden_total": 870
+}

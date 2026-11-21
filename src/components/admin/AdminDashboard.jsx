@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { extractSheetId } from '../../services/googleSheetsService';
 import {
   WHATSAPP_CONTACT_NAME,
   DEFAULT_WHATSAPP_NUMBER,
@@ -24,18 +23,20 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
-  Clock,
-  Layers,
-  DollarSign,
   Package,
-  Sliders,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   Database,
-  FileSpreadsheet,
   Phone,
-  RotateCcw
+  RotateCcw,
+  Eye,
+  EyeOff,
+  CheckSquare,
+  Square,
+  Film,
+  Image as ImageIcon,
+  ShieldAlert,
+  Cloud
 } from 'lucide-react';
 
 const DEFAULT_PIN = '888888';
@@ -44,23 +45,29 @@ export default function AdminDashboard() {
   const {
     isAdminOpen,
     setIsAdminOpen,
+    adminProducts,
     products,
     updateProduct,
+    bulkUpdateProducts,
     addProduct,
     deleteProduct,
     exportCatalog,
     importCatalogFromCsv,
     resetToMasterCatalog,
-    googleSheetId,
-    setGoogleSheetId,
+    r2PublicUrl,
+    updateR2PublicUrl,
+    isS3EndpointWarning,
     syncStatus,
-    syncError,
     lastSyncTime,
-    syncWithGoogleSheet,
+    importBatchReport,
+    syncWithSupabase,
+    evaluatePublishGate,
     formatPrice,
     whatsappNumber,
     updateWhatsappNumber
   } = useStore();
+
+  const catalogList = Array.isArray(adminProducts) && adminProducts.length > 0 ? adminProducts : products;
 
   // Authentication & Security State
   const [pinInput, setPinInput] = useState('');
@@ -71,7 +78,6 @@ export default function AdminDashboard() {
     return sessionStorage.getItem('cw_admin_auth') === 'true';
   });
 
-  // Countdown timer for security lockout (FE-06)
   useEffect(() => {
     if (lockoutSeconds > 0) {
       const timer = setTimeout(() => setLockoutSeconds((s) => s - 1), 1000);
@@ -79,29 +85,35 @@ export default function AdminDashboard() {
     }
   }, [lockoutSeconds]);
 
-  // Clean URL hash on modal close (FE-01)
   const handleCloseAdmin = () => {
     setIsAdminOpen(false);
     if (window.location.hash === '#/admin' || window.location.hash === '#admin') {
       try {
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      } catch (e) {
+      } catch {
         window.location.hash = '';
       }
     }
   };
 
+  // Active Sub-View ('products' | 'price_review' | 'import_report')
+  const [activeAdminView, setActiveAdminView] = useState('products');
+
   // Table & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('All');
   const [selectedStock, setSelectedStock] = useState('All');
+  const [selectedPubStatus, setSelectedPubStatus] = useState('All'); // 'All' | 'published' | 'unpublished'
+  const [selectedPriceStatus, setSelectedPriceStatus] = useState('All'); // 'All' | 'auto_matched' | 'confirmed' | 'missing'
+  const [showLegacyOnly, setShowLegacyOnly] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
   // Modals & Panels
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isWhatsappModalOpen, setIsWhatsappModalOpen] = useState(false);
-  const [tempSheetId, setTempSheetId] = useState(googleSheetId);
+  const [tempR2Url, setTempR2Url] = useState(r2PublicUrl || '');
   const [tempWhatsapp, setTempWhatsapp] = useState(whatsappNumber || DEFAULT_WHATSAPP_NUMBER);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
@@ -113,19 +125,22 @@ export default function AdminDashboard() {
     setTempWhatsapp(whatsappNumber || DEFAULT_WHATSAPP_NUMBER);
   }, [whatsappNumber]);
 
+  useEffect(() => {
+    setTempR2Url(r2PublicUrl || '');
+  }, [r2PublicUrl]);
+
   const activeFormattedPhone = formatWhatsAppDisplayPhone(whatsappNumber);
   const previewCleanPhone = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
   const previewFormattedPhone = formatWhatsAppDisplayPhone(previewCleanPhone);
 
   // Inline price edit state
-  const [inlineEditing, setInlineEditing] = useState(null); // { id: '...', field: 'variant1Price' | 'variant2Price', value: 700 }
+  const [inlineEditing, setInlineEditing] = useState(null);
 
   const showNotification = (msg, type = 'success') => {
     setActionNotice({ msg, type });
-    setTimeout(() => setActionNotice(null), 3000);
+    setTimeout(() => setActionNotice(null), 3500);
   };
 
-  // Auth Submit with Rate Limiting (FE-06)
   const handlePinSubmit = (e) => {
     e.preventDefault();
     if (lockoutSeconds > 0) return;
@@ -154,43 +169,89 @@ export default function AdminDashboard() {
     handleCloseAdmin();
   };
 
-  // Stats calculation
+  // V4 + Supabase + R2 Metrics
   const stats = useMemo(() => {
-    const total = products.length;
-    const inStock = products.filter((p) => p.stock !== 'OUT_OF_STOCK').length;
-    const outOfStock = total - inStock;
-    const uniqueBrands = new Set(products.map((p) => p.brand)).size;
-    return { total, inStock, outOfStock, uniqueBrands };
-  }, [products]);
+    const v4List = catalogList.filter((p) => !p.legacy);
+    const legacyList = catalogList.filter((p) => p.legacy);
+    const total = v4List.length;
+    const published = v4List.filter((p) => p.publication_status === 'published').length;
+    const autoMatched = v4List.filter((p) => p.price_status === 'auto_matched').length;
+    const confirmedPrice = v4List.filter((p) => p.price_status === 'confirmed').length;
+    const missingPrice = v4List.filter((p) => p.price_status === 'missing' || !p.variant1Price).length;
+    const missingBrand = v4List.filter((p) => !p.brand).length;
+    const withNickname = v4List.filter((p) => p.nickname).length;
+    const totalImages = v4List.reduce((acc, p) => acc + (Number(p.image_count) || 0), 0);
+    const totalVideos = v4List.reduce((acc, p) => acc + (Number(p.video_count) || 0), 0);
+    const uniqueBrands = new Set(v4List.map((p) => p.brand).filter(Boolean)).size;
 
-  // Brand list for filter
+    return {
+      total,
+      published,
+      unpublished: total - published,
+      autoMatched,
+      confirmedPrice,
+      missingPrice,
+      missingBrand,
+      withNickname,
+      totalImages,
+      totalVideos,
+      uniqueBrands,
+      legacyCount: legacyList.length
+    };
+  }, [catalogList]);
+
   const brandList = useMemo(() => {
-    const brands = Array.from(new Set(products.map((p) => p.brand).filter(Boolean))).sort();
-    return ['All', ...brands];
-  }, [products]);
+    const brands = Array.from(new Set(catalogList.map((p) => p.brand).filter(Boolean))).sort();
+    return ['All', '(Blank Brand)', ...brands];
+  }, [catalogList]);
 
-  // Filtered products
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      if (selectedBrand !== 'All' && p.brand !== selectedBrand) return false;
+    return catalogList.filter((p) => {
+      if (showLegacyOnly) {
+        if (!p.legacy) return false;
+      } else if (p.legacy) {
+        return false;
+      }
+
+      if (activeAdminView === 'price_review') {
+        if (p.price_status !== 'auto_matched' && p.price_status !== 'missing') return false;
+      }
+
+      if (selectedBrand === '(Blank Brand)') {
+        if (p.brand) return false;
+      } else if (selectedBrand !== 'All' && p.brand !== selectedBrand) {
+        return false;
+      }
+
       if (selectedStock === 'IN_STOCK' && p.stock === 'OUT_OF_STOCK') return false;
       if (selectedStock === 'OUT_OF_STOCK' && p.stock !== 'OUT_OF_STOCK') return false;
 
+      if (selectedPubStatus !== 'All' && p.publication_status !== selectedPubStatus) return false;
+      if (selectedPriceStatus !== 'All' && p.price_status !== selectedPriceStatus) return false;
+
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
-        const matchName = (p.name || '').toLowerCase().includes(q);
+        const matchId = (p.product_id || p.id || '').toLowerCase().includes(q);
+        const matchName = (p.name || p.title || '').toLowerCase().includes(q);
+        const matchNick = (p.nickname || '').toLowerCase().includes(q);
         const matchBrand = (p.brand || '').toLowerCase().includes(q);
-        const matchModel = (p.modelCode || p.spu || p.id || '').toLowerCase().includes(q);
-        const matchFactory = (p.factory || p.dataSheet?.factoryVersion || '').toLowerCase().includes(q);
-        const matchCalibre = (p.dataSheet?.calibre || p.dataSheet?.movement || p.movement || '').toLowerCase().includes(q);
-        const matchRef = (p.dataSheet?.modelReference || '').toLowerCase().includes(q);
-        if (!matchName && !matchBrand && !matchModel && !matchFactory && !matchCalibre && !matchRef) return false;
+        const matchCol = (p.collection || '').toLowerCase().includes(q);
+        const matchModel = (p.model || p.modelCode || p.spu || '').toLowerCase().includes(q);
+        if (!matchId && !matchName && !matchNick && !matchBrand && !matchCol && !matchModel) return false;
       }
       return true;
     });
-  }, [products, selectedBrand, selectedStock, searchTerm]);
+  }, [
+    catalogList,
+    showLegacyOnly,
+    activeAdminView,
+    selectedBrand,
+    selectedStock,
+    selectedPubStatus,
+    selectedPriceStatus,
+    searchTerm
+  ]);
 
-  // Paginated slice with auto-clamp (FE-03)
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -203,57 +264,149 @@ export default function AdminDashboard() {
     return filteredProducts.slice(start, start + itemsPerPage);
   }, [filteredProducts, currentPage]);
 
-  // Inline price save (FE-04)
-  const handleSaveInline = (productId, field) => {
-    if (!inlineEditing || inlineEditing.id !== productId) return;
+  // Inline price save -> auto marks price_status = 'confirmed' & price_source = 'admin' (BR-16/BR-17)
+  const handleSaveInline = (product, field) => {
+    if (!inlineEditing || inlineEditing.id !== product.id) return;
     const currentVal = inlineEditing.value;
     setInlineEditing(null);
     const num = parseFloat(currentVal);
     if (!isNaN(num) && num > 0) {
-      updateProduct(productId, { [field]: num });
-      showNotification(`Updated price for watch.`);
+      const patch = {
+        [field]: num,
+        price_status: 'confirmed',
+        price_source: 'admin'
+      };
+      if (field === 'variant1Price' && (!product.variant2Price || product.variant2Price <= 0)) {
+        patch.variant2Price = Math.round(num * 1.45);
+      }
+      updateProduct(product.id, patch);
+      showNotification(`Đã lưu và xác nhận giá cho ${product.product_id} (${product.name})`);
     }
   };
 
-  // Stock status toggle
+  // Approve auto-matched price (1-click)
+  const handleApprovePrice = (product) => {
+    if (!product.variant1Price || product.variant1Price <= 0) {
+      showNotification('Sản phẩm chưa có giá. Vui lòng nhấp vào ô giá để nhập trước khi duyệt.', 'error');
+      return;
+    }
+    updateProduct(product.id, {
+      price_status: 'confirmed',
+      price_source: 'admin'
+    });
+    showNotification(`Đã duyệt giá (${formatPrice(product.variant1Price)}) cho ${product.product_id}`);
+  };
+
+  // Toggle publication_status ('published' <-> 'unpublished') with BR-06 Publish Gate check
+  const handleTogglePublish = (product) => {
+    const isCurrentlyPublished = product.publication_status === 'published';
+    if (isCurrentlyPublished) {
+      updateProduct(product.id, { publication_status: 'unpublished' });
+      showNotification(`Đã gỡ xuất bản ${product.product_id}`);
+      return;
+    }
+
+    const gate = evaluatePublishGate ? evaluatePublishGate(product) : { canPublish: product.canPublish, reasons: product.publishBlockReasons || [] };
+    if (!gate.canPublish) {
+      showNotification(`Không thể xuất bản ${product.product_id}: ${gate.reasons.join('; ')}`, 'error');
+      return;
+    }
+
+    updateProduct(product.id, { publication_status: 'published' });
+    showNotification(`Đã xuất bản ${product.product_id} lên Storefront!`);
+  };
+
+  // Bulk actions
+  const toggleSelectId = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAllPage = () => {
+    const pageIds = paginatedProducts.map((p) => p.id);
+    const allSelected = pageIds.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const handleBulkApprovePrices = async () => {
+    const targets = catalogList.filter((p) => selectedIds.includes(p.id) && p.variant1Price > 0);
+    if (targets.length === 0) {
+      showNotification('Không có sản phẩm nào đã chọn có giá hợp lệ để duyệt.', 'error');
+      return;
+    }
+    const ids = targets.map((p) => p.id);
+    await bulkUpdateProducts(ids, { price_status: 'confirmed', price_source: 'admin' });
+    setSelectedIds([]);
+    showNotification(`Đã duyệt giá hàng loạt cho ${ids.length} sản phẩm!`);
+  };
+
+  const handleBulkPublish = async () => {
+    const selectedProducts = catalogList.filter((p) => selectedIds.includes(p.id));
+    const eligible = selectedProducts.filter((p) => (evaluatePublishGate ? evaluatePublishGate(p).canPublish : p.canPublish));
+    const blockedCount = selectedProducts.length - eligible.length;
+
+    if (eligible.length === 0) {
+      showNotification('Các sản phẩm đã chọn chưa đủ điều kiện xuất bản (thiếu brand hoặc giá — BR-06).', 'error');
+      return;
+    }
+    const ids = eligible.map((p) => p.id);
+    await bulkUpdateProducts(ids, { publication_status: 'published' });
+    setSelectedIds([]);
+    showNotification(
+      `Đã xuất bản ${ids.length} sản phẩm!${blockedCount > 0 ? ` (${blockedCount} SP bị bỏ qua do thiếu giá/brand)` : ''}`
+    );
+  };
+
+  const handleBulkUnpublish = async () => {
+    if (selectedIds.length === 0) return;
+    await bulkUpdateProducts(selectedIds, { publication_status: 'unpublished' });
+    const count = selectedIds.length;
+    setSelectedIds([]);
+    showNotification(`Đã chuyển ${count} sản phẩm về Chưa xuất bản.`);
+  };
+
   const handleToggleStock = (product) => {
     const nextStock = product.stock === 'OUT_OF_STOCK' ? 'IN_STOCK' : 'OUT_OF_STOCK';
     updateProduct(product.id, { stock: nextStock });
-    showNotification(`Watch marked as ${nextStock === 'IN_STOCK' ? 'In Stock' : 'Out of Stock'}.`);
+    showNotification(`Đã đổi trạng thái kho ${product.product_id}: ${nextStock}`);
   };
 
-  // Delete product
   const handleDeleteProduct = (product) => {
-    if (window.confirm(`Are you sure you want to delete "${product.name}"?`)) {
+    if (window.confirm(`Bạn có chắc muốn xóa "${product.name}" (${product.product_id})?`)) {
       deleteProduct(product.id);
-      showNotification(`Deleted ${product.name}`);
+      showNotification(`Đã xóa ${product.product_id}`);
     }
   };
 
-  // Save product from full modal
   const handleSaveFullProduct = (e) => {
     e.preventDefault();
     if (editingProduct) {
-      updateProduct(editingProduct.id, editingProduct);
-      showNotification(`Saved changes to "${editingProduct.name}"`);
+      const nextPriceStatus = editingProduct.variant1Price > 0 ? 'confirmed' : editingProduct.price_status;
+      updateProduct(editingProduct.id, {
+        ...editingProduct,
+        price_status: nextPriceStatus,
+        price_source: 'admin'
+      });
+      showNotification(`Đã lưu thông tin "${editingProduct.name}"`);
       setEditingProduct(null);
     }
   };
 
-  // Create new product
   const handleCreateProduct = (e) => {
     e.preventDefault();
     if (!editingProduct?.name) return;
     const added = addProduct({
       ...editingProduct,
-      id: `cw-custom-${Date.now()}`
+      product_id: editingProduct.product_id || `P9${String(Date.now()).slice(-5)}`
     });
-    showNotification(`Added new watch "${added.name}"`);
+    showNotification(`Đã thêm sản phẩm mới "${added.name}"`);
     setIsCreatingProduct(false);
     setEditingProduct(null);
   };
 
-  // Handle CSV Import
   const handleCsvFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -268,15 +421,14 @@ export default function AdminDashboard() {
     if (!csvFileContent) return;
     const count = importCatalogFromCsv(csvFileContent);
     if (count > 0) {
-      showNotification(`Successfully imported ${count} watches from CSV!`);
+      showNotification(`Đã nhập thành công ${count} sản phẩm từ CSV!`);
       setImportModalOpen(false);
       setCsvFileContent('');
     } else {
-      alert('Failed to parse CSV file. Please ensure it follows the Clonewatches catalog structure.');
+      alert('Không đọc được CSV. Vui lòng kiểm tra định dạng cột.');
     }
   };
 
-  // Save Sales WhatsApp Phone directly
   const handleSaveWhatsappDirect = (e) => {
     if (e) e.preventDefault();
     const normalized = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
@@ -296,32 +448,39 @@ export default function AdminDashboard() {
     showNotification(`Đã khôi phục SĐT mặc định: ${formatWhatsAppDisplayPhone(DEFAULT_WHATSAPP_NUMBER)}`);
   };
 
-  // Save Google Sheet ID & Sales WhatsApp Phone
-  const handleSaveSheetSettings = async (e) => {
+  const handleSaveCloudSettings = async (e) => {
     e.preventDefault();
-    const clean = extractSheetId(tempSheetId);
-    setGoogleSheetId(clean);
+    if (updateR2PublicUrl) {
+      updateR2PublicUrl(tempR2Url);
+    }
     const normalizedWa = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
     if (updateWhatsappNumber) {
       updateWhatsappNumber(normalizedWa);
     }
     setTempWhatsapp(normalizedWa);
     setIsSettingsOpen(false);
-    if (clean) {
-      await syncWithGoogleSheet(clean);
-    }
-    showNotification('Settings & Sales WhatsApp number updated successfully!');
+    await syncWithSupabase({ includeUnpublished: true });
+    showNotification('Đã lưu cấu hình Supabase + Cloudflare R2 CDN và đồng bộ dữ liệu!');
   };
 
   if (!isAdminOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-obsidian-950/85 backdrop-blur-md flex flex-col justify-between overflow-y-auto font-sans text-neutral-900">
-      
       {/* Toast Notification */}
       {actionNotice && (
-        <div className="fixed top-5 right-5 z-[70] bg-obsidian-900 text-white border border-gold-500/50 shadow-2xl px-4 py-3 flex items-center gap-2 text-xs font-mono animate-in slide-in-from-top-3">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <div
+          className={`fixed top-5 right-5 z-[70] text-white border shadow-2xl px-4 py-3 flex items-center gap-2 text-xs font-mono animate-in slide-in-from-top-3 ${
+            actionNotice.type === 'error'
+              ? 'bg-crimson-700 border-crimson-400'
+              : 'bg-obsidian-900 border-gold-500/50'
+          }`}
+        >
+          {actionNotice.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-amber-300 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          )}
           <span>{actionNotice.msg}</span>
         </div>
       )}
@@ -336,16 +495,62 @@ export default function AdminDashboard() {
             <h1 className="text-xs sm:text-sm font-bold uppercase tracking-wider flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="truncate">CloneWatches Admin CMS</span>
               <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 font-mono whitespace-nowrap flex-shrink-0">
-                v2.0 Live
+                V4 Supabase + R2
               </span>
             </h1>
             <p className="text-[10px] sm:text-[11px] text-white/50 font-mono truncate">
-              Hybrid Frontend &bull; Google Sheets SSoT
+              773 V4 Products &bull; 6,870 WebP Stills &bull; 39 MP4 Videos &bull; 128 Nicknames
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+          {isAuthenticated && (
+            <div className="hidden md:flex items-center gap-1 bg-white/5 p-1 border border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveAdminView('products');
+                  setShowLegacyOnly(false);
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                  activeAdminView === 'products' && !showLegacyOnly
+                    ? 'bg-gold-500 text-obsidian-950'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Catalog ({stats.total})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveAdminView('price_review');
+                  setShowLegacyOnly(false);
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                  activeAdminView === 'price_review'
+                    ? 'bg-gold-500 text-obsidian-950'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Rà soát giá ({stats.autoMatched + stats.missingPrice})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveAdminView('import_report')}
+                className={`px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                  activeAdminView === 'import_report'
+                    ? 'bg-gold-500 text-obsidian-950'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Báo cáo V4
+              </button>
+            </div>
+          )}
+
           {isAuthenticated && (
             <button
               onClick={handleLogout}
@@ -366,9 +571,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 max-w-[1440px] w-full mx-auto p-4 sm:p-6 lg:p-8">
-        
-        {/* ===================== PIN GATE SCREEN ===================== */}
+      <div className="flex-1 max-w-[1440px] w-full mx-auto p-3 sm:p-6 lg:p-8">
         {!isAuthenticated ? (
           <div className="max-w-md mx-auto my-12 bg-white border border-obsidian-800/15 p-6 sm:p-8 shadow-2xl space-y-6">
             <div className="text-center space-y-2">
@@ -379,7 +582,7 @@ export default function AdminDashboard() {
                 Storeowner Security Access
               </h2>
               <p className="text-xs text-obsidian-800/60 leading-relaxed">
-                Enter your 6-digit administrative security PIN to manage product catalog, pricing variants, and Google Sheet integration.
+                Nhập mã bảo mật Admin để quản trị Catalog V4 (773 sản phẩm), duyệt giá tự khớp và đồng bộ Supabase + Cloudflare R2.
               </p>
             </div>
 
@@ -401,9 +604,13 @@ export default function AdminDashboard() {
               </div>
 
               {authError && (
-                <div className={`p-2.5 text-xs border flex items-center gap-2 ${
-                  lockoutSeconds > 0 ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-crimson-50 text-crimson-700 border-crimson-200'
-                }`}>
+                <div
+                  className={`p-2.5 text-xs border flex items-center gap-2 ${
+                    lockoutSeconds > 0
+                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                      : 'bg-crimson-50 text-crimson-700 border-crimson-200'
+                  }`}
+                >
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>
                     {lockoutSeconds > 0 ? `Security lockout active: Retry in ${lockoutSeconds}s` : authError}
@@ -417,9 +624,7 @@ export default function AdminDashboard() {
                 className="w-full py-3 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-extrabold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Unlock className="w-4 h-4" />
-                <span>
-                  {lockoutSeconds > 0 ? `Locked (${lockoutSeconds}s)` : 'Unlock CMS Dashboard'}
-                </span>
+                <span>{lockoutSeconds > 0 ? `Locked (${lockoutSeconds}s)` : 'Unlock CMS Dashboard'}</span>
               </button>
 
               <div className="bg-obsidian-800/5 p-3 border border-obsidian-800/10 text-[11px] text-obsidian-800/70 font-mono text-center">
@@ -428,91 +633,251 @@ export default function AdminDashboard() {
             </form>
           </div>
         ) : (
-          /* ===================== AUTHENTICATED CMS DASHBOARD ===================== */
-          <div className="space-y-6">
-            
+          <div className="space-y-5">
+            {/* Warning banner if R2_PUBLIC_URL is set to the S3 API host instead of pub-*.r2.dev */}
+            {isS3EndpointWarning && (
+              <div className="bg-amber-50 border border-amber-400 p-3.5 text-xs text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="font-bold uppercase tracking-wider block">
+                      Lưu ý URL Public của Cloudflare R2
+                    </strong>
+                    <span>
+                      Toàn bộ 6.948 file V4 đã upload lên bucket <code className="font-mono font-bold">watch-saas-media</code>, nhưng URL hiện tại đang là S3 Endpoint (<code className="font-mono">{r2PublicUrl}</code>). Hãy bấm <strong>Cloudflare R2 &amp; DB Setup</strong> để dán link <code className="font-mono">https://pub-xxxx.r2.dev</code> của bucket.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="px-3 py-1.5 bg-obsidian-950 hover:bg-obsidian-800 text-gold-400 font-bold uppercase tracking-wider text-[11px] whitespace-nowrap border border-gold-500/40"
+                >
+                  Cập nhật R2 Public URL
+                </button>
+              </div>
+            )}
+
+            {/* Mobile Tab Switcher */}
+            <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveAdminView('products');
+                  setShowLegacyOnly(false);
+                }}
+                className={`px-3 py-1.5 text-xs font-bold uppercase whitespace-nowrap border ${
+                  activeAdminView === 'products' && !showLegacyOnly
+                    ? 'bg-obsidian-950 text-gold-400 border-obsidian-950'
+                    : 'bg-white text-obsidian-800 border-obsidian-800/20'
+                }`}
+              >
+                Catalog ({stats.total})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveAdminView('price_review');
+                  setShowLegacyOnly(false);
+                }}
+                className={`px-3 py-1.5 text-xs font-bold uppercase whitespace-nowrap border ${
+                  activeAdminView === 'price_review'
+                    ? 'bg-obsidian-950 text-gold-400 border-obsidian-950'
+                    : 'bg-white text-obsidian-800 border-obsidian-800/20'
+                }`}
+              >
+                Rà soát giá ({stats.autoMatched + stats.missingPrice})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveAdminView('import_report')}
+                className={`px-3 py-1.5 text-xs font-bold uppercase whitespace-nowrap border ${
+                  activeAdminView === 'import_report'
+                    ? 'bg-obsidian-950 text-gold-400 border-obsidian-950'
+                    : 'bg-white text-obsidian-800 border-obsidian-800/20'
+                }`}
+              >
+                Báo cáo V4
+              </button>
+            </div>
+
             {/* Top Metrics Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-obsidian-800/60 uppercase font-semibold">
-                  <span>Total Watches</span>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+              <div className="bg-white border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs text-obsidian-800 uppercase font-bold">
+                  <span>V4 Products</span>
                   <Package className="w-4 h-4 text-gold-600" />
                 </div>
                 <div className="text-2xl sm:text-3xl font-extrabold font-mono text-obsidian-950 mt-1">
                   {stats.total}
                 </div>
-                <div className="text-[11px] text-obsidian-800/60 mt-1 font-mono">
-                  {stats.uniqueBrands} Luxury Brands
+                <div className="text-[11px] text-obsidian-800 mt-1 font-mono font-medium">
+                  {stats.uniqueBrands} Brands &bull; {stats.withNickname} Nicknames
                 </div>
               </div>
 
-              <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-semibold">
-                  <span>In Stock</span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <div className="bg-white border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-bold">
+                  <span>Giá Tự Khớp / Duyệt</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-700 mt-1">
-                  {stats.inStock}
+                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-800 mt-1">
+                  {stats.autoMatched + stats.confirmedPrice}
                 </div>
-                <div className="text-[11px] text-emerald-700/80 mt-1">
-                  Ready for express dispatch
-                </div>
-              </div>
-
-              <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-crimson-800 uppercase font-semibold">
-                  <span>Out of Stock</span>
-                  <AlertCircle className="w-4 h-4 text-crimson-600" />
-                </div>
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-crimson-700 mt-1">
-                  {stats.outOfStock}
-                </div>
-                <div className="text-[11px] text-crimson-700/80 mt-1">
-                  Requires factory restock
+                <div className="text-[11px] text-emerald-800 mt-1 font-mono font-medium">
+                  Tự khớp: {stats.autoMatched} &bull; Đã duyệt: {stats.confirmedPrice}
                 </div>
               </div>
 
-              <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-obsidian-800/60 uppercase font-semibold">
-                  <span>Google Sheet SSoT</span>
+              <div
+                onClick={() => {
+                  setActiveAdminView('products');
+                  setSelectedPriceStatus('missing');
+                  setShowLegacyOnly(false);
+                }}
+                className="bg-white hover:bg-amber-50 border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
+                title="Bấm để lọc các sản phẩm thiếu giá hoặc thiếu brand"
+              >
+                <div className="flex items-center justify-between text-xs text-amber-900 uppercase font-bold">
+                  <span>Cần Bổ Sung Giá/Brand</span>
+                  <AlertCircle className="w-4 h-4 text-amber-700" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-900 mt-1">
+                  {stats.missingPrice}
+                </div>
+                <div className="text-[11px] text-amber-900 mt-1 font-mono font-medium">
+                  Trống brand: {stats.missingBrand} &bull; Xuất bản: {stats.published}
+                </div>
+              </div>
+
+              <div
+                onClick={() => setIsSettingsOpen(true)}
+                className="bg-white hover:bg-neutral-50 border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
+              >
+                <div className="flex items-center justify-between text-xs text-obsidian-800 uppercase font-bold">
+                  <span>Supabase + R2 CDN</span>
                   <Database className="w-4 h-4 text-gold-600" />
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`w-2.5 h-2.5 rounded-full ${
-                    syncStatus === 'SUCCESS' ? 'bg-emerald-500' : syncStatus === 'SYNCING' ? 'bg-gold-500 animate-pulse' : syncStatus === 'ERROR' ? 'bg-crimson-500' : 'bg-neutral-400'
-                  }`} />
-                  <span className="text-sm font-bold font-mono text-obsidian-950 uppercase">
-                    {syncStatus}
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      syncStatus === 'SUCCESS'
+                        ? 'bg-emerald-600'
+                        : syncStatus === 'SYNCING'
+                        ? 'bg-gold-500 animate-pulse'
+                        : 'bg-amber-600'
+                    }`}
+                  />
+                  <span className="text-xs sm:text-sm font-bold font-mono text-obsidian-950 uppercase truncate">
+                    {syncStatus === 'SUCCESS' ? 'SUPABASE LIVE' : 'V4 SNAPSHOT + R2'}
                   </span>
                 </div>
-                <div className="text-[10px] text-obsidian-800/60 font-mono mt-1 truncate">
-                  {lastSyncTime ? `Synced: ${lastSyncTime}` : 'Offline Cached Data'}
+                <div className="text-[10px] text-obsidian-800 font-mono font-medium mt-1 truncate">
+                  {stats.totalImages.toLocaleString()} ảnh &bull; {stats.totalVideos} video trên R2
                 </div>
               </div>
 
               <div
                 onClick={() => setIsWhatsappModalOpen(true)}
-                className="col-span-2 md:col-span-1 bg-emerald-50/40 hover:bg-emerald-50 border border-[#25D366]/40 p-4 shadow-sm cursor-pointer transition-colors group"
+                className="col-span-2 md:col-span-1 bg-white hover:bg-neutral-50 border-2 border-emerald-700 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors group"
                 title="Bấm để cài đặt nhanh số điện thoại WhatsApp nhận đơn hàng"
               >
-                <div className="flex items-center justify-between text-xs text-[#008A38] uppercase font-bold">
+                <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-extrabold">
                   <span>WhatsApp Owner</span>
-                  <WhatsAppIcon className="w-4 h-4 text-[#25D366]" />
+                  <WhatsAppIcon className="w-4 h-4 text-emerald-700" />
                 </div>
                 <div className="text-sm sm:text-base font-extrabold font-mono text-obsidian-950 mt-1.5 truncate">
                   {activeFormattedPhone}
                 </div>
-                <div className="text-[10px] text-[#008A38] font-semibold mt-1 flex items-center justify-between gap-1">
+                <div className="text-[11px] text-emerald-800 font-bold mt-1 flex items-center justify-between gap-1">
                   <span className="truncate">{WHATSAPP_CONTACT_NAME}</span>
                   <span className="underline group-hover:text-obsidian-950 flex-shrink-0">Sửa SĐT &rarr;</span>
                 </div>
               </div>
             </div>
 
+            {/* ===================== VIEW: IMPORT REPORT (Product Doc §6.4) ===================== */}
+            {activeAdminView === 'import_report' && (
+              <div className="bg-white border border-obsidian-800/15 p-5 sm:p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-obsidian-800/10">
+                  <div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-obsidian-950">
+                      Báo Cáo Lô Import Gói Ảnh Chính V4 &amp; Auto-Matching Giá
+                    </h2>
+                    <p className="text-xs text-obsidian-800/60 font-mono">
+                      Batch ID: {importBatchReport?.batch_id || 'V4-2026-11-16-NICKNAMES'} &bull; Bucket R2: watch-saas-media
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveAdminView('products')}
+                    className="px-3 py-1.5 bg-obsidian-950 text-white text-xs font-bold uppercase tracking-wider self-start sm:self-auto"
+                  >
+                    &larr; Quay lại Danh sách Product
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  <div className="p-4 bg-neutral-50 border border-obsidian-800/10 space-y-1.5">
+                    <div className="font-bold uppercase text-obsidian-800/60">Toàn vẹn Media V4 &amp; R2</div>
+                    <div className="text-lg font-extrabold font-mono text-obsidian-950">
+                      773 Product &bull; 6.870 Ảnh &bull; 39 Video
+                    </div>
+                    <p className="text-emerald-700 font-semibold">
+                      ✔ 6.948 / 6.948 file trên Cloudflare R2 khớp 100% SHA-256 (asset_manifest.json)
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-emerald-50/50 border border-emerald-200 space-y-1.5">
+                    <div className="font-bold uppercase text-emerald-900">Kết Quả Tự Động Nối Giá (D11 / BR-10)</div>
+                    <div className="text-lg font-extrabold font-mono text-emerald-800">
+                      {stats.autoMatched + stats.confirmedPrice} / {stats.total} Product có giá
+                    </div>
+                    <p className="text-emerald-800/80">
+                      Khớp trực tiếp mẫu: 193 SP &bull; Khớp theo bộ sưu tập/thương hiệu đồng giá: 564 SP
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-amber-50/60 border border-amber-200 space-y-1.5">
+                    <div className="font-bold uppercase text-amber-900">Ngoại Lệ Cần Admin Kiểm Tra</div>
+                    <div className="text-lg font-extrabold font-mono text-amber-800">
+                      {stats.missingPrice} SP chưa có giá &bull; {stats.missingBrand} SP trống brand
+                    </div>
+                    <p className="text-amber-900/80">
+                      CMS cũ ngoài V4 (Panerai, Breitling, Cartier...) đang tạm ẩn (BR-11)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveAdminView('products');
+                      setSelectedPriceStatus('missing');
+                      setSelectedBrand('All');
+                    }}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider"
+                  >
+                    Xem {stats.missingPrice} Product chưa có giá
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveAdminView('products');
+                      setSelectedBrand('(Blank Brand)');
+                      setSelectedPriceStatus('All');
+                    }}
+                    className="px-3.5 py-2 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-bold uppercase tracking-wider"
+                  >
+                    Xem {stats.missingBrand} Product thiếu Brand
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Action Bar */}
-            <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-              
-              {/* Left Action Buttons */}
+            <div className="bg-white border border-obsidian-800/10 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => {
@@ -520,7 +885,7 @@ export default function AdminDashboard() {
                       name: '',
                       brand: 'Rolex',
                       collection: 'Submariner',
-                      modelCode: `SPU-${Math.floor(1000 + Math.random() * 9000)}`,
+                      modelCode: `P90${Math.floor(1000 + Math.random() * 9000)}`,
                       variant1Name: 'Swiss Movement',
                       variant1Price: 700,
                       variant2Name: 'VS / Clean 1:1 Super Clone',
@@ -529,14 +894,14 @@ export default function AdminDashboard() {
                       movement: 'Super Clone Dandong 3235 Movement',
                       material: 'Solid 904L Oystersteel',
                       waterResistance: '50m / 5 ATM Tested',
-                      primaryImage: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80',
-                      galleryImages: ['https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80'],
+                      primaryImage: '/figma-assets/watches/watch-0.png',
+                      galleryImages: ['/figma-assets/watches/watch-0.png'],
                       description: 'Custom Swiss Dandong movement, authentic sapphire glass, ceramic bezel.',
                       stock: 'IN_STOCK'
                     });
                     setIsCreatingProduct(true);
                   }}
-                  className="px-3.5 py-2 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-3 py-2 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Watch</span>
@@ -544,30 +909,15 @@ export default function AdminDashboard() {
 
                 <button
                   onClick={exportCatalog}
-                  className="px-3.5 py-2 bg-white hover:bg-obsidian-800/5 text-obsidian-950 text-xs font-bold uppercase tracking-wider border border-obsidian-800/20 transition-all flex items-center gap-1.5 shadow-sm"
-                  title="Xuất danh mục 991 sản phẩm chuẩn định dạng Google Sheets / Excel"
+                  className="px-3 py-2 bg-white hover:bg-obsidian-800/5 text-obsidian-950 text-xs font-bold uppercase tracking-wider border border-obsidian-800/20 transition-all flex items-center gap-1.5 shadow-sm"
                 >
                   <Download className="w-3.5 h-3.5 text-gold-600" />
-                  <span>Export Google Sheet CSV</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (window.confirm('Tải lại toàn bộ 991 sản phẩm gốc đã làm giàu đầy đủ thông tin (Description, Data Sheet, Calibre Engine, 4K CDN Images)? Thao tác này sẽ làm mới bộ nhớ cache của trình duyệt.')) {
-                      const count = resetToMasterCatalog();
-                      showNotification(`Đã tải lại thành công ${count} sản phẩm với đầy đủ Data Sheet và mô tả chi tiết!`);
-                    }
-                  }}
-                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 text-xs font-bold uppercase tracking-wider border border-emerald-300 transition-all flex items-center gap-1.5 shadow-sm"
-                  title="Làm mới bộ nhớ cache và nạp lại toàn bộ 991 sản phẩm đã làm giàu thông tin"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>Reload 991 Catalog</span>
+                  <span>Export CSV</span>
                 </button>
 
                 <button
                   onClick={() => setImportModalOpen(true)}
-                  className="px-3.5 py-2 bg-white hover:bg-obsidian-800/5 text-obsidian-950 text-xs font-bold uppercase tracking-wider border border-obsidian-800/20 transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 bg-white hover:bg-obsidian-800/5 text-obsidian-950 text-xs font-bold uppercase tracking-wider border border-obsidian-800/20 transition-all flex items-center gap-1.5"
                 >
                   <Upload className="w-3.5 h-3.5 text-obsidian-700" />
                   <span>Import CSV</span>
@@ -575,47 +925,96 @@ export default function AdminDashboard() {
 
                 <button
                   onClick={() => setIsWhatsappModalOpen(true)}
-                  className="px-3.5 py-2 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#008A38] text-xs font-bold uppercase tracking-wider border border-[#25D366]/50 transition-all flex items-center gap-1.5 shadow-sm"
-                  title="Cài đặt số điện thoại WhatsApp nhận đơn hàng"
+                  className="px-3 py-2 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold uppercase tracking-wider border-2 border-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
                 >
-                  <WhatsAppIcon className="w-3.5 h-3.5 text-[#008A38]" />
-                  <span>WhatsApp Setup ({activeFormattedPhone})</span>
+                  <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>WhatsApp ({activeFormattedPhone})</span>
                 </button>
 
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="px-3.5 py-2 bg-gold-50 hover:bg-gold-100 text-gold-950 text-xs font-bold uppercase tracking-wider border border-gold-300 transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 bg-gold-50 hover:bg-gold-100 text-gold-950 text-xs font-bold uppercase tracking-wider border border-gold-300 transition-all flex items-center gap-1.5"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-gold-700" />
-                  <span>Google Sheet Setup</span>
+                  <Cloud className="w-3.5 h-3.5 text-gold-700" />
+                  <span>Cloudflare R2 &amp; DB Setup</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (window.confirm('Khôi phục dữ liệu V4 gốc (773 Product + giá tự khớp)?')) {
+                      const count = resetToMasterCatalog();
+                      showNotification(`Đã khôi phục ${count} Product V4!`);
+                    }
+                  }}
+                  className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-obsidian-900 text-xs font-bold uppercase tracking-wider border border-obsidian-800/15 transition-all flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset V4 Snapshot</span>
                 </button>
               </div>
 
-              {/* Right: Live Sync Trigger */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => syncWithGoogleSheet()}
+                  onClick={() => syncWithSupabase({ includeUnpublished: true })}
                   disabled={syncStatus === 'SYNCING'}
-                  className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all ${
+                  className={`px-3.5 py-2 text-xs font-bold uppercase tracking-wider border flex items-center gap-2 transition-all ${
                     syncStatus === 'SYNCING'
                       ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
                       : 'bg-white hover:bg-obsidian-950 hover:text-white text-obsidian-950 border-obsidian-800/20'
                   }`}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
-                  <span>{syncStatus === 'SYNCING' ? 'Syncing...' : 'Sync Live Data'}</span>
+                  <span>{syncStatus === 'SYNCING' ? 'Syncing...' : 'Sync Supabase'}</span>
                 </button>
               </div>
-
             </div>
+
+            {/* Bulk Action Bar (appears when items selected — Product Doc §6.1) */}
+            {selectedIds.length > 0 && (
+              <div className="bg-obsidian-950 text-white p-3.5 shadow-md flex flex-wrap items-center justify-between gap-3 border border-gold-500/40">
+                <div className="text-xs font-mono">
+                  Đã chọn <strong className="text-gold-400">{selectedIds.length}</strong> sản phẩm
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBulkApprovePrices}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider"
+                  >
+                    ✔ Duyệt giá đã chọn
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkPublish}
+                    className="px-3 py-1.5 bg-gold-500 hover:bg-gold-400 text-obsidian-950 text-xs font-extrabold uppercase tracking-wider"
+                  >
+                    Xuất bản lên Storefront
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkUnpublish}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold uppercase tracking-wider"
+                  >
+                    Gỡ xuất bản
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds([])}
+                    className="px-2.5 py-1.5 text-xs text-white/70 hover:text-white"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Quick Inline WhatsApp Phone Setup Bar */}
             <form
               onSubmit={handleSaveWhatsappDirect}
-              className="bg-emerald-50/50 border border-[#25D366]/40 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3"
+              className="bg-white border-2 border-emerald-700 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3"
             >
               <div className="flex items-start sm:items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                <div className="w-9 h-9 rounded-lg bg-emerald-700 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
                   <WhatsAppIcon className="w-5 h-5" />
                 </div>
                 <div>
@@ -623,31 +1022,31 @@ export default function AdminDashboard() {
                     <span className="text-xs font-extrabold uppercase tracking-wider text-obsidian-950">
                       Cài Đặt Nhanh Số Điện Thoại WhatsApp Nhận Đơn Hàng
                     </span>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#25D366]/20 text-[#008A38]">
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-800 text-white">
                       Đang dùng: {activeFormattedPhone}
                     </span>
                   </div>
-                  <p className="text-[11px] text-obsidian-800/70 mt-0.5">
-                    Nhập SĐT dạng <code className="font-mono bg-white px-1 border border-obsidian-800/10">0977889986</code> hoặc <code className="font-mono bg-white px-1 border border-obsidian-800/10">+84 97 788 99 86</code> — hệ thống tự động chuẩn hóa sang liên kết <code className="font-mono text-[#008A38]">wa.me/{previewCleanPhone}</code>
+                  <p className="text-[11px] text-obsidian-800 font-medium mt-0.5">
+                    Nhập SĐT dạng <code className="font-mono bg-neutral-100 text-obsidian-950 px-1 border border-obsidian-800/20">0977889986</code> hoặc <code className="font-mono bg-neutral-100 text-obsidian-950 px-1 border border-obsidian-800/20">+84 97 788 99 86</code> — tự động chuẩn hóa sang <code className="font-mono font-bold text-emerald-800">wa.me/{previewCleanPhone}</code>
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                 <div className="relative flex-1 sm:w-64">
-                  <Phone className="w-3.5 h-3.5 text-obsidian-800/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Phone className="w-3.5 h-3.5 text-obsidian-800 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={tempWhatsapp}
                     onChange={(e) => setTempWhatsapp(e.target.value)}
                     placeholder="VD: 0977889986 hoặc 84977889986"
-                    className="w-full bg-white border border-obsidian-800/20 focus:border-[#008A38] focus:outline-none pl-8 pr-3 py-2 text-xs font-mono font-bold text-obsidian-950"
+                    className="w-full bg-white border border-obsidian-800/30 focus:border-emerald-700 focus:outline-none pl-8 pr-3 py-2 text-xs font-mono font-bold text-obsidian-950"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#008A38] hover:bg-[#00742f] text-white text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs cursor-pointer"
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Lưu SĐT</span>
@@ -657,8 +1056,7 @@ export default function AdminDashboard() {
                   href={generateWhatsAppUrl('Xin chào Thanh Phuong Luxury Watch, kiểm tra kết nối SĐT WhatsApp từ Admin!', previewCleanPhone)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-2 bg-white hover:bg-neutral-100 text-[#008A38] border border-[#25D366]/50 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 whitespace-nowrap"
-                  title="Mở thử khung chat WhatsApp với số điện thoại này"
+                  className="px-3 py-2 bg-white hover:bg-neutral-100 text-emerald-800 border border-emerald-700 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 whitespace-nowrap"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Test Chat</span>
@@ -667,8 +1065,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={handleResetWhatsappDefault}
-                  className="px-2.5 py-2 bg-white hover:bg-neutral-100 text-obsidian-800/70 hover:text-obsidian-950 border border-obsidian-800/15 text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
-                  title="Khôi phục về số mặc định +84 97 788 99 86"
+                  className="px-2.5 py-2 bg-white hover:bg-neutral-100 text-obsidian-900 hover:text-obsidian-950 border border-obsidian-800/30 text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span className="hidden xl:inline">Mặc định</span>
@@ -676,9 +1073,9 @@ export default function AdminDashboard() {
               </div>
             </form>
 
-            {/* Filters & Search Row */}
-            <div className="bg-white border border-obsidian-800/10 p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
-              <div className="relative w-full md:w-80">
+            {/* Filters & Search Row (Product Doc §6.1) */}
+            <div className="bg-white border border-obsidian-800/10 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              <div className="relative w-full lg:w-72">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-obsidian-800/40" />
                 <input
                   type="text"
@@ -687,14 +1084,14 @@ export default function AdminDashboard() {
                     setSearchTerm(e.target.value);
                     setCurrentPage(1);
                   }}
-                  placeholder="Search by Title, Model, SPU..."
+                  placeholder="Tìm Product ID (P000001), Nickname, Tên..."
                   className="w-full bg-neutral-50/60 border border-obsidian-800/15 pl-9 pr-3 py-2 text-xs text-obsidian-950 focus:outline-none focus:border-gold-500"
                 />
               </div>
 
-              <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="flex flex-wrap items-center gap-2.5">
                 {/* Brand Filter */}
-                <div className="flex items-center gap-1.5 text-xs text-obsidian-800/70">
+                <div className="flex items-center gap-1 text-xs text-obsidian-800/70">
                   <span className="font-semibold uppercase text-[10px]">Brand:</span>
                   <select
                     value={selectedBrand}
@@ -705,14 +1102,51 @@ export default function AdminDashboard() {
                     className="bg-neutral-50/60 border border-obsidian-800/15 px-2 py-1.5 text-xs text-obsidian-950 font-medium focus:outline-none"
                   >
                     {brandList.map((b) => (
-                      <option key={b} value={b}>{b}</option>
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
                     ))}
                   </select>
                 </div>
 
+                {/* Price Status Filter (BR-17) */}
+                <div className="flex items-center gap-1 text-xs text-obsidian-800/70">
+                  <span className="font-semibold uppercase text-[10px]">Giá:</span>
+                  <select
+                    value={selectedPriceStatus}
+                    onChange={(e) => {
+                      setSelectedPriceStatus(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="bg-neutral-50/60 border border-obsidian-800/15 px-2 py-1.5 text-xs text-obsidian-950 font-medium focus:outline-none"
+                  >
+                    <option value="All">Tất cả giá</option>
+                    <option value="auto_matched">Tự khớp ({stats.autoMatched})</option>
+                    <option value="confirmed">Đã duyệt ({stats.confirmedPrice})</option>
+                    <option value="missing">Chưa có giá ({stats.missingPrice})</option>
+                  </select>
+                </div>
+
+                {/* Publication Status Filter (BR-05/BR-06) */}
+                <div className="flex items-center gap-1 text-xs text-obsidian-800/70">
+                  <span className="font-semibold uppercase text-[10px]">Xuất bản:</span>
+                  <select
+                    value={selectedPubStatus}
+                    onChange={(e) => {
+                      setSelectedPubStatus(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="bg-neutral-50/60 border border-obsidian-800/15 px-2 py-1.5 text-xs text-obsidian-950 font-medium focus:outline-none"
+                  >
+                    <option value="All">Tất cả ({stats.total})</option>
+                    <option value="published">Đã xuất bản ({stats.published})</option>
+                    <option value="unpublished">Chưa xuất bản ({stats.unpublished})</option>
+                  </select>
+                </div>
+
                 {/* Stock Filter */}
-                <div className="flex items-center gap-1.5 text-xs text-obsidian-800/70">
-                  <span className="font-semibold uppercase text-[10px]">Stock:</span>
+                <div className="flex items-center gap-1 text-xs text-obsidian-800/70">
+                  <span className="font-semibold uppercase text-[10px]">Kho:</span>
                   <select
                     value={selectedStock}
                     onChange={(e) => {
@@ -721,11 +1155,26 @@ export default function AdminDashboard() {
                     }}
                     className="bg-neutral-50/60 border border-obsidian-800/15 px-2 py-1.5 text-xs text-obsidian-950 font-medium focus:outline-none"
                   >
-                    <option value="All">All Statuses</option>
-                    <option value="IN_STOCK">In Stock Only</option>
-                    <option value="OUT_OF_STOCK">Out of Stock Only</option>
+                    <option value="All">Tất cả</option>
+                    <option value="IN_STOCK">Còn hàng</option>
+                    <option value="OUT_OF_STOCK">Hết hàng</option>
                   </select>
                 </div>
+
+                {/* Legacy toggle (BR-11) */}
+                {stats.legacyCount > 0 && (
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-obsidian-800 cursor-pointer select-none px-2 py-1 bg-neutral-100 border border-obsidian-800/15">
+                    <input
+                      type="checkbox"
+                      checked={showLegacyOnly}
+                      onChange={(e) => {
+                        setShowLegacyOnly(e.target.checked);
+                        setCurrentPage(1);
+                      }}
+                    />
+                    <span>Legacy ẩn ({stats.legacyCount})</span>
+                  </label>
+                )}
               </div>
             </div>
 
@@ -735,153 +1184,300 @@ export default function AdminDashboard() {
                 <table className="w-full text-left text-xs divide-y divide-obsidian-800/10">
                   <thead className="bg-obsidian-950 text-white font-mono uppercase text-[11px] tracking-wider">
                     <tr>
-                      <th className="py-3 px-4">Watch</th>
-                      <th className="py-3 px-4">Brand / Series</th>
-                      <th className="py-3 px-4">Variant 1 (Swiss)</th>
-                      <th className="py-3 px-4">Variant 2 (Clean 1:1)</th>
-                      <th className="py-3 px-4 text-center">Stock</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                      <th className="py-3 px-3 w-8">
+                        <button
+                          type="button"
+                          onClick={toggleSelectAllPage}
+                          className="text-white/80 hover:text-gold-400 flex items-center"
+                          title="Chọn tất cả trang này"
+                        >
+                          {paginatedProducts.length > 0 &&
+                          paginatedProducts.every((p) => selectedIds.includes(p.id)) ? (
+                            <CheckSquare className="w-4 h-4 text-gold-400" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="py-3 px-3">Product V4 / Nickname</th>
+                      <th className="py-3 px-3">Brand / Series</th>
+                      <th className="py-3 px-3">Giá (Swiss / 1:1) &amp; Nguồn</th>
+                      <th className="py-3 px-3 text-center">Media R2</th>
+                      <th className="py-3 px-3 text-center">Xuất Bản (BR-06)</th>
+                      <th className="py-3 px-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-obsidian-800/5">
                     {paginatedProducts.length > 0 ? (
                       paginatedProducts.map((p) => {
                         const img = Array.isArray(p.images) && p.images[0] ? p.images[0] : (p.primaryImage || '');
-                        const isOut = p.stock === 'OUT_OF_STOCK';
+                        const isSelected = selectedIds.includes(p.id);
+                        const isPublished = p.publication_status === 'published';
+                        const gate = evaluatePublishGate ? evaluatePublishGate(p) : { canPublish: p.canPublish, reasons: p.publishBlockReasons || [] };
 
                         return (
-                          <tr key={p.id} className="hover:bg-neutral-50/80 transition-colors">
+                          <tr
+                            key={p.id}
+                            className={`hover:bg-neutral-50/80 transition-colors ${
+                              isSelected ? 'bg-gold-50/30' : ''
+                            }`}
+                          >
+                            <td className="py-3 px-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleSelectId(p.id)}
+                                className="text-obsidian-800/60 hover:text-obsidian-950"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-obsidian-950" />
+                                ) : (
+                                  <Square className="w-4 h-4" />
+                                )}
+                              </button>
+                            </td>
+
                             {/* Watch info & thumbnail */}
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-3">
                               <div className="flex items-center gap-3">
                                 <img
                                   src={img}
                                   alt={p.name}
-                                  className="w-12 h-12 object-cover border border-obsidian-800/10 flex-shrink-0"
+                                  className="w-12 h-12 object-cover border border-obsidian-800/10 flex-shrink-0 bg-neutral-100"
                                   onError={(e) => {
                                     e.target.onerror = null;
-                                    e.target.src = 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80';
+                                    e.target.src = '/figma-assets/watches/watch-0.png';
                                   }}
                                 />
                                 <div className="max-w-xs sm:max-w-md">
                                   <div className="font-bold text-obsidian-950 line-clamp-1">
                                     {p.name}
                                   </div>
-                                  <div className="text-[10px] text-obsidian-800/60 font-mono">
-                                    {p.modelCode || p.spu || p.id} &bull; {p.caseSize || '40mm'}
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] font-mono font-bold text-obsidian-800 bg-neutral-100 px-1.5 py-0.2 border border-obsidian-800/10">
+                                      {p.product_id}
+                                    </span>
+                                    {p.nickname && (
+                                      <span
+                                        className="text-[10px] font-bold bg-obsidian-950 text-gold-400 px-1.5 py-0.2"
+                                        title="Nickname mô tả kiểu dáng (BR-08)"
+                                      >
+                                        &ldquo;{p.nickname}&rdquo;
+                                      </span>
+                                    )}
+                                    {p.dial_color && (
+                                      <span className="text-[10px] text-obsidian-800 font-mono">
+                                        &bull; {p.dial_color}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
                             </td>
 
                             {/* Brand / Series */}
-                            <td className="py-3 px-4 font-mono">
-                              <span className="font-bold text-obsidian-950 block">{p.brand}</span>
-                              <span className="text-[10px] text-gold-700">{p.collection}</span>
-                            </td>
-
-                            {/* Variant 1 Price (Inline editable) */}
-                            <td className="py-3 px-4">
-                              {inlineEditing?.id === p.id && inlineEditing.field === 'variant1Price' ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs font-mono font-bold">$</span>
-                                  <input
-                                    type="number"
-                                    value={inlineEditing.value}
-                                    onChange={(e) => setInlineEditing({ ...inlineEditing, value: e.target.value })}
-                                    onBlur={() => handleSaveInline(p.id, 'variant1Price')}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        e.currentTarget.blur();
-                                      } else if (e.key === 'Escape') {
-                                        setInlineEditing(null);
-                                      }
-                                    }}
-                                    className="w-20 px-1 py-0.5 border border-gold-500 font-mono text-xs focus:outline-none"
-                                    autoFocus
-                                  />
-                                </div>
+                            <td className="py-3 px-3 font-mono">
+                              {p.brand ? (
+                                <span className="font-bold text-obsidian-950 block">{p.brand}</span>
                               ) : (
-                                <div
-                                  onClick={() => setInlineEditing({ id: p.id, field: 'variant1Price', value: p.variant1Price || 700 })}
-                                  className="cursor-pointer group flex items-center gap-1 hover:text-gold-600"
-                                  title="Click to edit Variant 1 price"
-                                >
-                                  <span className="font-mono font-bold">{formatPrice(p.variant1Price || 700)}</span>
-                                  <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 text-obsidian-800/40" />
-                                </div>
+                                <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 border border-amber-300 inline-block">
+                                  ⚠ Thiếu Brand
+                                </span>
                               )}
-                              <span className="text-[10px] text-obsidian-800/50 block font-mono">
-                                {p.variant1Name || 'Swiss Movt'}
+                              <span className="text-[10px] text-gold-700 block">
+                                {p.collection || p.model || '—'}
                               </span>
                             </td>
 
-                            {/* Variant 2 Price (Inline editable) */}
-                            <td className="py-3 px-4">
-                              {inlineEditing?.id === p.id && inlineEditing.field === 'variant2Price' ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs font-mono font-bold">$</span>
-                                  <input
-                                    type="number"
-                                    value={inlineEditing.value}
-                                    onChange={(e) => setInlineEditing({ ...inlineEditing, value: e.target.value })}
-                                    onBlur={() => handleSaveInline(p.id, 'variant2Price')}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        e.currentTarget.blur();
-                                      } else if (e.key === 'Escape') {
-                                        setInlineEditing(null);
-                                      }
-                                    }}
-                                    className="w-20 px-1 py-0.5 border border-gold-500 font-mono text-xs focus:outline-none"
-                                    autoFocus
-                                  />
-                                </div>
-                              ) : (
-                                <div
-                                  onClick={() => setInlineEditing({ id: p.id, field: 'variant2Price', value: p.variant2Price || 1199 })}
-                                  className="cursor-pointer group flex items-center gap-1 hover:text-gold-600"
-                                  title="Click to edit Variant 2 price"
-                                >
-                                  <span className="font-mono font-bold">{formatPrice(p.variant2Price || 1199)}</span>
-                                  <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 text-obsidian-800/40" />
-                                </div>
-                              )}
-                              <span className="text-[10px] text-obsidian-800/50 block font-mono">
-                                {p.variant2Name || 'Clean 1:1'}
-                              </span>
+                            {/* Price & Auto-Match Status */}
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-2">
+                                {inlineEditing?.id === p.id && inlineEditing.field === 'variant1Price' ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-mono font-bold">$</span>
+                                    <input
+                                      type="number"
+                                      value={inlineEditing.value}
+                                      onChange={(e) => setInlineEditing({ ...inlineEditing, value: e.target.value })}
+                                      onBlur={() => handleSaveInline(p, 'variant1Price')}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          e.currentTarget.blur();
+                                        } else if (e.key === 'Escape') {
+                                          setInlineEditing(null);
+                                        }
+                                      }}
+                                      className="w-20 px-1 py-0.5 border border-gold-500 font-mono text-xs focus:outline-none"
+                                      autoFocus
+                                    />
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() =>
+                                      setInlineEditing({
+                                        id: p.id,
+                                        field: 'variant1Price',
+                                        value: p.variant1Price || 700
+                                      })
+                                    }
+                                    className="cursor-pointer group flex items-center gap-1 hover:text-gold-600"
+                                    title="Bấm để sửa giá Variant 1"
+                                  >
+                                    <span className="font-mono font-bold">
+                                      {p.variant1Price > 0 ? formatPrice(p.variant1Price) : '— Nhập giá'}
+                                    </span>
+                                    <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 text-obsidian-800/40" />
+                                  </div>
+                                )}
+
+                                <span className="text-obsidian-800 font-mono">/</span>
+
+                                {inlineEditing?.id === p.id && inlineEditing.field === 'variant2Price' ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-mono font-bold">$</span>
+                                    <input
+                                      type="number"
+                                      value={inlineEditing.value}
+                                      onChange={(e) => setInlineEditing({ ...inlineEditing, value: e.target.value })}
+                                      onBlur={() => handleSaveInline(p, 'variant2Price')}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          e.currentTarget.blur();
+                                        } else if (e.key === 'Escape') {
+                                          setInlineEditing(null);
+                                        }
+                                      }}
+                                      className="w-20 px-1 py-0.5 border border-gold-500 font-mono text-xs focus:outline-none"
+                                      autoFocus
+                                    />
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() =>
+                                      setInlineEditing({
+                                        id: p.id,
+                                        field: 'variant2Price',
+                                        value: p.variant2Price || 1199
+                                      })
+                                    }
+                                    className="cursor-pointer group flex items-center gap-1 hover:text-gold-600"
+                                    title="Bấm để sửa giá Variant 2"
+                                  >
+                                    <span className="font-mono text-obsidian-800/80">
+                                      {p.variant2Price > 0 ? formatPrice(p.variant2Price) : '—'}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {p.price_status === 'confirmed' ? (
+                                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2">
+                                    ✔ Đã duyệt
+                                  </span>
+                                ) : p.price_status === 'auto_matched' ? (
+                                  <>
+                                    <span
+                                      className="text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2"
+                                      title={p.match_notes || 'Tự khớp từ CMS cũ'}
+                                    >
+                                      Tự khớp {p.match_confidence ? `(${Math.round(p.match_confidence * 100)}%)` : ''}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApprovePrice(p)}
+                                      className="text-[10px] font-bold text-emerald-700 hover:underline"
+                                    >
+                                      [Duyệt]
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0.2">
+                                    Chưa có giá
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
-                            {/* Stock status toggle */}
-                            <td className="py-3 px-4 text-center">
+                            {/* Media readiness & counts */}
+                            <td className="py-3 px-3 text-center font-mono">
+                              <div className="inline-flex items-center gap-2 text-[11px]">
+                                <span className="inline-flex items-center gap-0.5 text-emerald-700 font-bold" title="Số ảnh WebP đã duyệt">
+                                  <ImageIcon className="w-3.5 h-3.5" />
+                                  {p.image_count || p.images?.length || 0}
+                                </span>
+                                {(p.video_count > 0 || (p.videos && p.videos.length > 0)) && (
+                                  <span className="inline-flex items-center gap-0.5 text-amber-700 font-bold" title="Có video MP4 + poster (BR-04)">
+                                    <Film className="w-3.5 h-3.5" />
+                                    {p.video_count || p.videos.length}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Publication Gate & Toggle (BR-05 / BR-06) */}
+                            <td className="py-3 px-3 text-center">
                               <button
-                                onClick={() => handleToggleStock(p)}
-                                className={`px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase border transition-colors ${
-                                  isOut
-                                    ? 'bg-crimson-50 text-crimson-700 border-crimson-200 hover:bg-crimson-100'
-                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                type="button"
+                                onClick={() => handleTogglePublish(p)}
+                                title={
+                                  isPublished
+                                    ? 'Đang hiển thị trên Storefront — bấm để gỡ xuất bản'
+                                    : gate.canPublish
+                                    ? 'Đủ điều kiện BR-06 — bấm để xuất bản lên Storefront'
+                                    : `Bị khóa xuất bản: ${gate.reasons.join('; ')}`
+                                }
+                                className={`px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase border transition-colors inline-flex items-center gap-1 ${
+                                  isPublished
+                                    ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
+                                    : gate.canPublish
+                                    ? 'bg-white text-obsidian-900 border-obsidian-800/30 hover:bg-obsidian-950 hover:text-white'
+                                    : 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
                                 }`}
                               >
-                                {isOut ? 'Out of Stock' : 'In Stock'}
+                                {isPublished ? (
+                                  <>
+                                    <Eye className="w-3 h-3" />
+                                    <span>Đã XB</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <EyeOff className="w-3 h-3" />
+                                    <span>{gate.canPublish ? 'Chưa XB' : 'Khóa XB'}</span>
+                                  </>
+                                )}
                               </button>
                             </td>
 
                             {/* Actions */}
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
                                 <button
+                                  type="button"
+                                  onClick={() => handleToggleStock(p)}
+                                  className={`px-1.5 py-0.5 text-[10px] font-mono border ${
+                                    p.stock === 'OUT_OF_STOCK'
+                                      ? 'bg-crimson-50 text-crimson-700 border-crimson-200'
+                                      : 'bg-neutral-50 text-obsidian-800 border-obsidian-800/15'
+                                  }`}
+                                  title="Đổi trạng thái Còn hàng / Hết hàng"
+                                >
+                                  {p.stock === 'OUT_OF_STOCK' ? 'Hết' : 'Kho ✔'}
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => setEditingProduct({ ...p })}
                                   className="p-1.5 hover:bg-obsidian-800/10 text-obsidian-800 hover:text-obsidian-950 transition-colors"
-                                  title="Edit Full Specifications"
+                                  title="Chỉnh sửa chi tiết sản phẩm"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => handleDeleteProduct(p)}
                                   className="p-1.5 hover:bg-crimson-50 text-obsidian-800/40 hover:text-crimson-600 transition-colors"
-                                  title="Delete Watch"
+                                  title="Xóa sản phẩm"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -892,8 +1488,8 @@ export default function AdminDashboard() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-obsidian-800/60">
-                          No matching watches found.
+                        <td colSpan={7} className="py-12 text-center text-obsidian-800/60">
+                          Không tìm thấy sản phẩm khớp bộ lọc.
                         </td>
                       </tr>
                     )}
@@ -903,7 +1499,7 @@ export default function AdminDashboard() {
 
               {/* Table Pagination Bar */}
               <div className="p-4 border-t border-obsidian-800/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <span className="text-obsidian-800/60 font-mono">
+                <span className="text-obsidian-800 font-mono font-medium">
                   Showing {(currentPage - 1) * itemsPerPage + 1} &ndash;{' '}
                   {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length} items
                 </span>
@@ -929,10 +1525,8 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
-
           </div>
         )}
-
       </div>
 
       {/* ===================== DEDICATED WHATSAPP PHONE SETUP MODAL ===================== */}
@@ -948,9 +1542,7 @@ export default function AdminDashboard() {
                   <h3 className="font-bold text-xs sm:text-sm uppercase tracking-wider text-obsidian-950 leading-snug">
                     Cài Đặt Số Điện Thoại WhatsApp Chốt Đơn
                   </h3>
-                  <p className="text-[11px] text-obsidian-800/60 truncate">
-                    {WHATSAPP_CONTACT_NAME}
-                  </p>
+                  <p className="text-[11px] text-obsidian-800/60 truncate">{WHATSAPP_CONTACT_NAME}</p>
                 </div>
               </div>
               <button
@@ -984,12 +1576,8 @@ export default function AdminDashboard() {
                     Khôi phục số mặc định
                   </button>
                 </div>
-                <p className="text-[11px] text-obsidian-800/60 mt-1.5 leading-relaxed">
-                  Bạn có thể nhập dạng <code className="font-mono bg-neutral-100 px-1">0977889986</code>, <code className="font-mono bg-neutral-100 px-1">84977889986</code> hoặc <code className="font-mono bg-neutral-100 px-1">+84 97 788 99 86</code>. Hệ thống sẽ tự động chuyển đầu <code className="font-mono">0</code> thành mã quốc tế <code className="font-mono">84</code>.
-                </p>
               </div>
 
-              {/* Live URL & Display Preview */}
               <div className="bg-emerald-50/60 border border-[#25D366]/40 p-3 sm:p-3.5 text-xs space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-obsidian-800/70">Hiển thị trên web &amp; Checkout:</span>
@@ -1035,15 +1623,15 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* ===================== GOOGLE SHEETS SETTINGS MODAL ===================== */}
+      {/* ===================== CLOUDFLARE R2 & SUPABASE SETTINGS MODAL ===================== */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-60 bg-obsidian-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white max-w-xl w-full border border-obsidian-800/20 shadow-2xl p-6 sm:p-8 space-y-5 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3 border-obsidian-800/10">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <Cloud className="w-5 h-5 text-gold-600" />
                 <h3 className="font-bold text-sm uppercase tracking-wider text-obsidian-950">
-                  Google Sheets Real-time SSoT Integration
+                  Cấu Hình Supabase Postgres &amp; Cloudflare R2 Media CDN
                 </h3>
               </div>
               <button onClick={() => setIsSettingsOpen(false)}>
@@ -1051,10 +1639,26 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveSheetSettings} className="space-y-4">
+            <form onSubmit={handleSaveCloudSettings} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1">
-                  Sales WhatsApp Phone Number (Mặc định: +84 97 788 99 86 • Thanh Phuong Luxury Watch):
+                  Cloudflare R2 Public Development URL (<code className="font-mono">pub-xxxx.r2.dev</code> hoặc Custom Domain):
+                </label>
+                <input
+                  type="text"
+                  value={tempR2Url}
+                  onChange={(e) => setTempR2Url(e.target.value)}
+                  placeholder="https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"
+                  className="w-full p-2.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-obsidian-800/60 mt-1">
+                  Lấy tại Cloudflare Dashboard &rarr; R2 &rarr; <code className="font-mono">watch-saas-media</code> &rarr; Settings &rarr; Public Development URL. Hệ thống tự động ghép với đường dẫn <code className="font-mono">assets/P000001/...</code>.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1">
+                  Sales WhatsApp Phone Number:
                 </label>
                 <input
                   type="text"
@@ -1063,39 +1667,13 @@ export default function AdminDashboard() {
                   placeholder="84977889986 (+84 97 788 99 86)"
                   className="w-full p-2.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
                 />
-                <p className="text-[11px] text-obsidian-800/60 mt-1">
-                  Mặc định sử dụng SĐT +84 97 788 99 86 (Thanh Phuong Luxury Watch) để mở trực tiếp khung chat kèm nội dung đơn hàng.
-                </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1">
-                  Google Sheet ID or Full Shareable Link:
-                </label>
-                <input
-                  type="text"
-                  value={tempSheetId}
-                  onChange={(e) => setTempSheetId(e.target.value)}
-                  placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms or paste URL"
-                  className="w-full p-2.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
-                />
-                <p className="text-[11px] text-obsidian-800/60 mt-1">
-                  Extracts the ID automatically from any Google Sheet URL.
-                </p>
-              </div>
-
-              {/* Instructions Guide */}
-              <div className="bg-obsidian-800/5 p-4 border border-obsidian-800/10 text-xs space-y-2">
-                <h4 className="font-bold uppercase tracking-wider text-[11px] text-obsidian-950">
-                  How To Connect Your Google Sheet (Zero Backend):
-                </h4>
-                <ol className="list-decimal pl-4 space-y-1 text-obsidian-800/80 text-[11px]">
-                  <li>Import <code className="bg-white px-1 font-mono">public/clonewatches_master_catalog.csv</code> into Google Drive / Sheets.</li>
-                  <li>In Google Sheets, click the green <strong>Share</strong> button (top right).</li>
-                  <li>Under <em>General Access</em>, change from "Restricted" to <strong>"Anyone with the link can view"</strong>.</li>
-                  <li>Copy the URL or Sheet ID and paste it into the field above.</li>
-                  <li>Click <strong>Save &amp; Sync Now</strong> below. The frontend will immediately read live prices and stock changes!</li>
-                </ol>
+              <div className="bg-obsidian-800/5 p-4 border border-obsidian-800/10 text-xs space-y-1.5 font-mono">
+                <div className="font-bold uppercase text-obsidian-950">Trạng thái hạ tầng hiện tại:</div>
+                <div>&bull; Supabase URL: https://nuhgccxcwlrsbbcxpskn.supabase.co</div>
+                <div>&bull; R2 Bucket: watch-saas-media (6.948 / 6.948 files uploaded)</div>
+                <div>&bull; Migration SQL: supabase/migrations/20261121000001_init_catalog_v4.sql</div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
@@ -1104,13 +1682,13 @@ export default function AdminDashboard() {
                   onClick={() => setIsSettingsOpen(false)}
                   className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-obsidian-800/60 hover:text-obsidian-950"
                 >
-                  Cancel
+                  Đóng
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2.5 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-extrabold uppercase tracking-wider transition-all shadow-md"
                 >
-                  Save &amp; Sync Now
+                  Lưu &amp; Đồng Bộ Ngay
                 </button>
               </div>
             </form>
@@ -1123,29 +1701,53 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-60 bg-obsidian-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-obsidian-800/20 shadow-2xl p-6 sm:p-8 space-y-5 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3 border-obsidian-800/10">
-              <h3 className="font-bold text-sm uppercase tracking-wider text-obsidian-950">
-                {isCreatingProduct ? 'Add New Timepiece' : `Edit: ${editingProduct?.name}`}
-              </h3>
-              <button onClick={() => { setEditingProduct(null); setIsCreatingProduct(false); }}>
+              <div>
+                <h3 className="font-bold text-sm uppercase tracking-wider text-obsidian-950">
+                  {isCreatingProduct ? 'Add New Timepiece' : `${editingProduct?.product_id} · ${editingProduct?.name}`}
+                </h3>
+                {!isCreatingProduct && editingProduct && (
+                  <p className="text-[11px] font-mono text-obsidian-800/60 mt-0.5">
+                    Ảnh V4: {editingProduct.image_count || editingProduct.images?.length || 0} &bull; Video: {editingProduct.video_count || editingProduct.videos?.length || 0}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setEditingProduct(null);
+                  setIsCreatingProduct(false);
+                }}
+              >
                 <X className="w-5 h-5 text-obsidian-800/60 hover:text-obsidian-950" />
               </button>
             </div>
 
             <form onSubmit={isCreatingProduct ? handleCreateProduct : handleSaveFullProduct} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-1">Watch Title:</label>
-                <input
-                  type="text"
-                  required
-                  value={editingProduct?.name || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1">Watch Title:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingProduct?.name || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value, title: e.target.value })}
+                    className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1">Nickname (BR-08):</label>
+                  <input
+                    type="text"
+                    value={editingProduct?.nickname || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, nickname: e.target.value })}
+                    placeholder="VD: Pepsi, Spectre..."
+                    className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1">Brand:</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1">Brand (bắt buộc để XB):</label>
                   <input
                     type="text"
                     required
@@ -1158,7 +1760,6 @@ export default function AdminDashboard() {
                   <label className="block text-xs font-bold uppercase tracking-wider mb-1">Collection / Series:</label>
                   <input
                     type="text"
-                    required
                     value={editingProduct?.collection || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, collection: e.target.value })}
                     className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
@@ -1180,8 +1781,10 @@ export default function AdminDashboard() {
                   <label className="block text-xs font-bold uppercase tracking-wider mb-1">Variant 1 Price (USD):</label>
                   <input
                     type="number"
-                    value={editingProduct?.variant1Price || 700}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, variant1Price: parseFloat(e.target.value) || 0 })}
+                    value={editingProduct?.variant1Price || 0}
+                    onChange={(e) =>
+                      setEditingProduct({ ...editingProduct, variant1Price: parseFloat(e.target.value) || 0 })
+                    }
                     className="w-full p-2 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
                   />
                 </div>
@@ -1199,8 +1802,10 @@ export default function AdminDashboard() {
                   <label className="block text-xs font-bold uppercase tracking-wider mb-1">Variant 2 Price (USD):</label>
                   <input
                     type="number"
-                    value={editingProduct?.variant2Price || 1199}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, variant2Price: parseFloat(e.target.value) || 0 })}
+                    value={editingProduct?.variant2Price || 0}
+                    onChange={(e) =>
+                      setEditingProduct({ ...editingProduct, variant2Price: parseFloat(e.target.value) || 0 })
+                    }
                     className="w-full p-2 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
                   />
                 </div>
@@ -1217,15 +1822,6 @@ export default function AdminDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider mb-1">Water Resistance:</label>
-                  <input
-                    type="text"
-                    value={editingProduct?.waterResistance || '50m / 5 ATM'}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, waterResistance: e.target.value })}
-                    className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
-                  />
-                </div>
-                <div>
                   <label className="block text-xs font-bold uppercase tracking-wider mb-1">Stock Status:</label>
                   <select
                     value={editingProduct?.stock || 'IN_STOCK'}
@@ -1236,206 +1832,52 @@ export default function AdminDashboard() {
                     <option value="OUT_OF_STOCK">OUT_OF_STOCK</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-1">Movement Details:</label>
-                <input
-                  type="text"
-                  value={editingProduct?.movement || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, movement: e.target.value })}
-                  className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Data Sheet Specifications Group */}
-              <div className="bg-neutral-50 p-3 border border-obsidian-800/10 space-y-3">
-                <div className="font-bold text-[11px] uppercase tracking-wider text-obsidian-950 flex items-center justify-between">
-                  <span>Data Sheet Specifications (vsfwatch.cc Standard):</span>
-                  <span className="text-[10px] text-gold-700 font-mono">8-Field Spec Table</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Model Reference:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.modelReference || editingProduct?.modelCode || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          modelCode: val,
-                          dataSheet: { ...editingProduct?.dataSheet, modelReference: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. 126610LN"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Factory / Version:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.factoryVersion || editingProduct?.factory || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          factory: val,
-                          dataSheet: { ...editingProduct?.dataSheet, factoryVersion: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. VSF Ultimate Edition"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Movement / Calibre:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.calibre || editingProduct?.dataSheet?.movement || editingProduct?.movement || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          movement: val,
-                          dataSheet: { ...editingProduct?.dataSheet, calibre: val, movement: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white font-mono"
-                      placeholder="e.g. Dandong Super Clone VS3235"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Dial:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.dial || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          dataSheet: { ...editingProduct?.dataSheet, dial: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. Black Sunray Dial with Chromalight"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Bezel:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.bezel || editingProduct?.bezel || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          bezel: val,
-                          dataSheet: { ...editingProduct?.dataSheet, bezel: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. Cerachrom Ceramic 60-Minute Graduated"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Case Material:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.caseMaterial || editingProduct?.material || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          material: val,
-                          dataSheet: { ...editingProduct?.dataSheet, caseMaterial: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. Solid 904L Oystersteel"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Case Dimensions:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.caseDimensions || (editingProduct?.caseSize ? `${editingProduct.caseSize} x 12.0 mm` : '')}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          dataSheet: { ...editingProduct?.dataSheet, caseDimensions: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. 41 mm x 12.1 mm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Bracelet:</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.bracelet || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          dataSheet: { ...editingProduct?.dataSheet, bracelet: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. Solid 904L Steel Oyster with Glidelock"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[10px] uppercase font-bold text-obsidian-800/70 mb-0.5">Water Resistance (Data Sheet):</label>
-                    <input
-                      type="text"
-                      value={editingProduct?.dataSheet?.waterResistance || editingProduct?.waterResistance || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEditingProduct({
-                          ...editingProduct,
-                          waterResistance: val,
-                          dataSheet: { ...editingProduct?.dataSheet, waterResistance: val }
-                        });
-                      }}
-                      className="w-full p-1.5 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none bg-white"
-                      placeholder="e.g. 50 Meters (Pressure Tested)"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1">Publication Status:</label>
+                  <select
+                    value={editingProduct?.publication_status || 'unpublished'}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, publication_status: e.target.value })}
+                    className="w-full p-2 text-xs border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
+                  >
+                    <option value="unpublished">Unpublished (Nháp)</option>
+                    <option value="published">Published (Xuất bản)</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-1">Primary Image URL:</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">
+                  Hero Image Relative Path / URL:
+                </label>
                 <input
                   type="text"
-                  value={editingProduct?.primaryImage || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, primaryImage: e.target.value })}
+                  value={editingProduct?.hero_image || editingProduct?.primaryImage || ''}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, hero_image: e.target.value, primaryImage: e.target.value })
+                  }
                   className="w-full p-2 text-xs font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider">Full Product Description (Calibre Engine &amp; Specifications):</label>
-                  <span className="text-[10px] text-obsidian-800/60 font-mono">Multi-line formatted</span>
-                </div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">
+                  Full Product Description:
+                </label>
                 <textarea
-                  rows={8}
+                  rows={6}
                   value={editingProduct?.description || ''}
                   onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
                   className="w-full p-2.5 text-[11px] font-mono border border-obsidian-800/20 focus:border-gold-500 focus:outline-none leading-relaxed"
-                  placeholder="Full watch description with Calibre and Technical Specifications..."
                 />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-obsidian-800/10">
                 <button
                   type="button"
-                  onClick={() => { setEditingProduct(null); setIsCreatingProduct(false); }}
+                  onClick={() => {
+                    setEditingProduct(null);
+                    setIsCreatingProduct(false);
+                  }}
                   className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-obsidian-800/60"
                 >
                   Cancel
@@ -1444,7 +1886,7 @@ export default function AdminDashboard() {
                   type="submit"
                   className="px-6 py-2.5 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-extrabold uppercase tracking-wider transition-all shadow-md"
                 >
-                  {isCreatingProduct ? 'Create Watch' : 'Save Changes'}
+                  {isCreatingProduct ? 'Create Watch' : 'Save & Confirm Price'}
                 </button>
               </div>
             </form>
@@ -1466,7 +1908,7 @@ export default function AdminDashboard() {
             </div>
 
             <p className="text-xs text-obsidian-800/70">
-              Upload a UTF-8 CSV file containing your product catalog. Columns should match the standard Clonewatches catalog structure (ID, Brand, Collection, Title, Variant 1, Variant 2...).
+              Upload file CSV UTF-8 chứa danh mục sản phẩm (Product ID, Brand, Collection, Title, Variant 1, Variant 2...).
             </p>
 
             <div className="border-2 border-dashed border-obsidian-800/20 p-6 text-center">
@@ -1498,7 +1940,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

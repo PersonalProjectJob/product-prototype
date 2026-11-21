@@ -1,7 +1,19 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import CRAWLED_WATCHES from '../data/crawled_watches.json';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import V4_SNAPSHOT from '../data/v4_catalog_snapshot.json';
 import { CURRENCY_RATES } from '../data/watches';
-import { fetchGoogleSheetData, downloadCsv } from '../services/googleSheetsService';
+import { downloadCsv } from '../services/googleSheetsService';
+import {
+  resolveMediaUrl,
+  evaluatePublishGate,
+  fetchSupabaseCatalog,
+  fetchLatestImportBatch,
+  updateSupabaseProduct,
+  bulkUpdateSupabaseProducts,
+  recordOrderInSupabase,
+  getR2PublicBaseUrl,
+  setR2PublicBaseUrl,
+  isS3ApiEndpointInsteadOfPublicDev
+} from '../services/supabaseService';
 import {
   getStoreWhatsAppNumber,
   setStoreWhatsAppNumber,
@@ -13,7 +25,7 @@ import {
 
 const StoreContext = createContext();
 
-export const CURRENT_CATALOG_VERSION = 'v2.6_figma_standalone_inlined_thumbnails';
+export const CURRENT_CATALOG_VERSION = 'v4.0_supabase_r2_nicknames';
 
 export const FIGMA_WATCH_IMAGES = [
   '/figma-assets/watches/watch-0.png',
@@ -45,14 +57,14 @@ export function getFigmaWatchImageByIndex(index) {
 
 export function getFigmaWatchThumbnail(p) {
   if (!p) return getFigmaWatchImageByIndex(0);
-  const name = (p.name || '').toLowerCase();
+  const name = (p.name || p.title || '').toLowerCase();
   const brand = (p.brand || '').toLowerCase();
 
   // 1. Omega Models
   if (brand.includes('omega') || name.includes('omega')) {
     if (name.includes('constellation')) return getFigmaWatchImageByIndex(1);
     if (name.includes('speedmaster') || name.includes('moonwatch') || name.includes('chronometer')) return getFigmaWatchImageByIndex(5);
-    return getFigmaWatchImageByIndex(0); // Omega De Ville
+    return getFigmaWatchImageByIndex(0);
   }
 
   // 2. Rolex Specific Models
@@ -73,94 +85,179 @@ export function getFigmaWatchThumbnail(p) {
   if (name.includes('two-tone') || name.includes('two tone') || name.includes('bicolor')) return getFigmaWatchImageByIndex(15);
   if (name.includes('daytona')) return getFigmaWatchImageByIndex(13);
 
-  // 3. Deterministic hash across 17 Figma watch assets
-  const seed = (p.id || p.name || 'watch').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const seed = (p.product_id || p.id || p.title || p.name || 'watch').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return getFigmaWatchImageByIndex(seed);
 }
 
+/**
+ * Normalizes a V4 or Legacy CMS record into the unified shape consumed by both Storefront and Admin CMS.
+ * - Preserves BR-01 (product_id as primary identity), BR-03 (gallery sorted by position, position 1 = hero_image),
+ *   BR-04 (video posters excluded from product gallery count), BR-08 (nickname descriptive label),
+ *   BR-12 (strips any Unsplash placeholder URLs).
+ */
 export function normalizeWatch(p) {
   if (!p) return null;
-  const rawGallery = Array.isArray(p.images) && p.images.length > 0
-    ? p.images
-    : (Array.isArray(p.galleryImages) && p.galleryImages.length > 0
-      ? p.galleryImages
-      : (typeof p.galleryImages === 'string' && p.galleryImages
-        ? p.galleryImages.split(',').map(s => s.trim()).filter(Boolean)
-        : [p.primaryImage].filter(Boolean)));
 
-  const isLogoOrPlaceholder = (url) => {
+  const productId = p.product_id || p.id || `P${Math.floor(100000 + Math.random() * 900000)}`;
+  const figmaFallback = getFigmaWatchThumbnail(p);
+
+  // Extract structured V4 gallery or array of URLs
+  const structuredGallery = Array.isArray(p.product_images) && p.product_images.length > 0
+    ? [...p.product_images].sort((a, b) => (Number(a.position) || 1) - (Number(b.position) || 1))
+    : (Array.isArray(p.gallery) && p.gallery.length > 0
+      ? [...p.gallery].sort((a, b) => (Number(a.position) || 1) - (Number(b.position) || 1))
+      : []);
+
+  const isPlaceholder = (url) => {
     if (!url || typeof url !== 'string') return true;
-    if (url.includes('932e9558f0dc5') || url.includes('1f65403e05')) return true;
     if (url.includes('images.unsplash.com')) return true;
+    if (url.includes('932e9558f0dc5') || url.includes('1f65403e05')) return true;
     if (url.includes('819e9bbafa326f2613358e0363f1a65638564f6d0ff9246c7f8874043a1e936d')) return true;
     return false;
   };
 
-  const figmaThumbnail = getFigmaWatchThumbnail(p);
-  const cleanGallery = rawGallery.filter(img => !isLogoOrPlaceholder(img));
+  const galleryPaths = structuredGallery.length > 0
+    ? structuredGallery.map((g) => g.src).filter(Boolean)
+    : (Array.isArray(p.images) && p.images.length > 0
+      ? p.images.filter((u) => !isPlaceholder(u))
+      : (typeof p.galleryImages === 'string' && p.galleryImages
+        ? p.galleryImages.split(',').map((s) => s.trim()).filter((u) => !isPlaceholder(u))
+        : []));
 
-  // Authentic Figma watch thumbnail always placed first as primary luxury studio photo
-  const gallery = cleanGallery.length > 0
-    ? [figmaThumbnail, ...cleanGallery]
-    : [figmaThumbnail];
-  const primaryImage = figmaThumbnail;
+  const heroRelPath = p.hero_image || galleryPaths[0] || '';
+  const resolvedGallery = galleryPaths.length > 0
+    ? galleryPaths.map((src) => resolveMediaUrl(src, figmaFallback))
+    : [resolveMediaUrl(heroRelPath, figmaFallback)];
 
-  const v1Price = Number(p.variant1Price || p.priceUSD || 700);
-  const v2Price = Number(p.variant2Price || 1199);
+  const primaryImage = resolveMediaUrl(heroRelPath, resolvedGallery[0] || figmaFallback);
 
-  return {
+  // Structured V4 Videos (BR-04: posters separate from product images)
+  const rawVideos = Array.isArray(p.product_videos) && p.product_videos.length > 0
+    ? p.product_videos
+    : (Array.isArray(p.videos) ? p.videos : []);
+
+  const videos = rawVideos.map((v) => ({
+    video_id: v.video_id,
+    src: v.src,
+    poster: v.poster,
+    url: resolveMediaUrl(v.src, ''),
+    posterUrl: resolveMediaUrl(v.poster, primaryImage),
+    width: v.width,
+    height: v.height,
+    duration: v.duration
+  }));
+
+  const rawV1 = p.variant1_price ?? p.variant1Price ?? p.priceUSD;
+  const rawV2 = p.variant2_price ?? p.variant2Price;
+  const hasValidPrice = rawV1 !== null && rawV1 !== undefined && Number(rawV1) > 0;
+  const v1Price = hasValidPrice ? Number(rawV1) : 0;
+  const v2Price = rawV2 !== null && rawV2 !== undefined && Number(rawV2) > 0
+    ? Number(rawV2)
+    : (hasValidPrice ? Math.round(v1Price * 1.45) : 0);
+
+  const priceStatus = p.price_status || p.priceStatus || (hasValidPrice ? 'auto_matched' : 'missing');
+  const priceSource = p.price_source || p.priceSource || (hasValidPrice ? 'cms_legacy' : null);
+  const publicationStatus = (p.publication_status || p.publicationStatus || (p.status === 'ACTIVE' ? 'published' : 'unpublished')).toLowerCase();
+  const isLegacy = Boolean(p.legacy);
+  const imageCount = Number(p.image_count ?? (structuredGallery.length || galleryPaths.length || 0));
+  const videoCount = Number(p.video_count ?? videos.length);
+  const ds = p.data_sheet || p.dataSheet || {};
+
+  const record = {
     ...p,
-    id: p.id || `cw-${Math.random().toString(36).substring(2, 9)}`,
-    brand: p.brand || 'Rolex',
-    collection: p.collection || 'Signature Collection',
-    name: p.name || 'Master Clone Watch',
-    modelCode: p.modelCode || p.spu || 'SPU-1001',
-    factory: p.factory || (p.dataSheet?.factoryVersion || 'VS / CLEAN FACTORY'),
-    variant1Name: p.variant1Name || 'Swiss Movement',
-    variant1Price: v1Price,
-    variant2Name: p.variant2Name || 'VS / Clean 1:1 Super Clone',
-    variant2Price: v2Price,
-    priceUSD: v1Price,
-    originalPriceUSD: Number(p.originalPriceUSD || Math.round(v2Price * 1.15)),
+    id: productId,
+    product_id: productId,
+    family_id: p.family_id || null,
+    spu: p.spu || p.modelCode || productId,
+    modelCode: p.reference || p.spu || productId,
+    brand: p.brand !== undefined && p.brand !== null ? String(p.brand).trim() : '',
+    collection: p.collection || '',
+    model: p.model || '',
+    reference: p.reference || ds.modelReference || '',
+    title: p.title || p.name || productId,
+    name: p.title || p.name || productId,
+    nickname: p.nickname || null,
+    dial_color: p.dial_color || p.dial || null,
+    case_finish: p.case_finish || null,
+    bracelet_or_strap: p.bracelet_or_strap || ds.bracelet || null,
+    size_mm: p.size_mm || p.caseSize || null,
+    caseSize: p.size_mm ? `${String(p.size_mm).replace(/mm$/i, '')}mm` : (p.caseSize || '40mm'),
+    case_material: p.case_material || p.material || ds.caseMaterial || null,
+    material: p.case_material || p.material || ds.caseMaterial || 'Solid 904L Stainless Steel',
+    media_readiness: p.media_readiness || 'web_ready',
+    export_status: p.export_status || 'export_ready',
+    publication_status: publicationStatus,
+    status: publicationStatus === 'published' ? 'ACTIVE' : 'DRAFT',
+    hero_image: heroRelPath,
     primaryImage,
-    galleryImages: gallery,
-    images: gallery,
-    movement: p.movement || (p.dataSheet?.movement || 'Custom Dandong Super Clone Movement'),
-    caseSize: p.caseSize || '40mm',
-    material: p.material || (p.dataSheet?.caseMaterial || 'Solid 904L Oystersteel, Cerachrom Bezel'),
-    bezel: p.bezel || (p.dataSheet?.bezel || 'Unidirectional Rotatable Cerachrom Ceramic'),
-    crystal: p.crystal || 'Scratch-Resistant Sapphire with AR Coating',
-    waterResistance: p.waterResistance || (p.dataSheet?.waterResistance || '50m / 5 ATM Waterproof Tested'),
-    description: p.description || '',
-    rawDescriptionHtml: p.rawDescriptionHtml || '',
-    dataSheet: p.dataSheet || null,
-    richShowcase: p.richShowcase || null,
-    qcVideoVimeoId: p.qcVideoVimeoId || null,
-    qcVideoUrl: p.qcVideoUrl || null,
-    status: (p.status || 'ACTIVE').toUpperCase(),
+    gallery: structuredGallery.map((g) => ({
+      ...g,
+      resolvedUrl: resolveMediaUrl(g.src, figmaFallback)
+    })),
+    galleryImages: resolvedGallery,
+    images: resolvedGallery,
+    image_count: imageCount,
+    videos,
+    video_count: videoCount,
+    factory: p.factory || ds.factoryVersion || 'VS / CLEAN FACTORY',
+    variant1Name: p.variant1_name || p.variant1Name || 'Swiss Movement',
+    variant1Price: v1Price,
+    variant1_price: hasValidPrice ? v1Price : null,
+    variant2Name: p.variant2_name || p.variant2Name || 'VS / Clean 1:1 Super Clone',
+    variant2Price: v2Price,
+    variant2_price: v2Price > 0 ? v2Price : null,
+    priceUSD: v1Price || 700,
+    originalPriceUSD: Number(p.originalPriceUSD || Math.round((v2Price || 1199) * 1.15)),
+    price_status: priceStatus,
+    price_source: priceSource,
+    match_confidence: p.match_confidence ?? null,
+    match_notes: p.match_notes || null,
+    legacy_cms_id: p.legacy_cms_id || null,
+    legacy: isLegacy,
     stock: (p.stock || 'IN_STOCK').toUpperCase(),
+    movement: p.movement || ds.movement || 'Custom Super Clone Calibre',
+    bezel: p.bezel || ds.bezel || 'Precision Ceramic / Brushed Bezel',
+    crystal: p.crystal || 'Scratch-Resistant Sapphire with AR Coating',
+    waterResistance: p.water_resistance || p.waterResistance || ds.waterResistance || '50m / 5 ATM Waterproof Tested',
+    description: p.description || p.description_html || '',
+    rawDescriptionHtml: p.description_html || p.rawDescriptionHtml || p.description || '',
+    dataSheet: ds,
+    data_sheet: ds,
+    qcVideoVimeoId: p.qcVideoVimeoId || null,
+    qcVideoUrl: videos[0]?.url || p.qc_video_url || p.qcVideoUrl || null,
     rating: p.rating || 4.9,
     reviewsCount: p.reviewsCount || 48,
-    badge: p.badge || (v2Price > 1000 ? 'BEST SELLER' : 'SUPER CLONE')
+    badge: p.nickname ? `"${p.nickname}"` : (p.badge || (v2Price > 1000 ? 'BEST SELLER' : 'V4 VERIFIED'))
   };
+
+  const gate = evaluatePublishGate(record);
+  record.canPublish = gate.canPublish;
+  record.publishBlockReasons = gate.reasons;
+  return record;
 }
 
 export function getProductSlug(watch) {
   if (!watch) return '';
   if (watch.slug) return watch.slug;
-  const name = String(watch.name || '').toLowerCase();
-  if (name.includes('seamaster') && name.includes('300m')) {
-    if (name.includes('007')) return 'seamaster-diver-300m-007';
-    return 'seamaster-diver-300m';
-  }
-  return name
-    .replace(/^(omega|rolex|patek\s+philippe|audemars\s+piguet)\s+super\s+clone\s+watches\s+\d+\s+/i, '')
+  const pid = (watch.product_id || watch.id || '').toLowerCase();
+  const name = String(watch.name || watch.title || '').toLowerCase();
+  const baseSlug = name
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || (watch.id || 'watch').toLowerCase();
+    .replace(/^-|-$/g, '');
+  if (pid && /^p\d{6}$/i.test(pid)) {
+    return baseSlug ? `${pid}-${baseSlug}` : pid;
+  }
+  return baseSlug || pid || 'watch';
+}
+
+function buildInitialV4Catalog() {
+  // By default V4 products start unpublished (BR-05).
+  // For initial storefront experience when no products have been published yet,
+  // we keep track of publication_status accurately while exposing a storefront subset.
+  return (V4_SNAPSHOT || []).map(normalizeWatch).filter(Boolean);
 }
 
 export function StoreProvider({ children }) {
-  // Currency state
   const [currency, setCurrency] = useState(() => {
     return localStorage.getItem('cw_currency') || 'USD';
   });
@@ -169,107 +266,101 @@ export function StoreProvider({ children }) {
     localStorage.setItem('cw_currency', currency);
   }, [currency]);
 
-  // Product Catalog (SSoT: Google Sheets -> LocalStorage -> Crawled JSON Fallback)
-  const [products, setProducts] = useState(() => {
+  const [r2PublicUrl, setR2PublicUrlState] = useState(() => getR2PublicBaseUrl());
+
+  // All products state (Admin sees all 773 V4 + legacy if loaded; Storefront filters published or previewable V4)
+  const [allProducts, setAllProducts] = useState(() => {
     try {
       const storedVersion = localStorage.getItem('cw_catalog_version');
-      const saved = localStorage.getItem('cw_products_catalog');
+      const overridesRaw = localStorage.getItem('cw_v4_product_overrides');
+      const base = buildInitialV4Catalog();
 
-      // Check if stored data is present and belongs to the current enriched version
-      if (storedVersion === CURRENT_CATALOG_VERSION && saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasEnrichedData = parsed.some(p => p.dataSheet || (p.rawDescriptionHtml && p.rawDescriptionHtml.length > 100));
-          if (hasEnrichedData) {
-            return parsed.map(normalizeWatch).filter(Boolean);
-          }
-        }
+      if (storedVersion === CURRENT_CATALOG_VERSION && overridesRaw) {
+        const overrides = JSON.parse(overridesRaw);
+        return base.map((item) => {
+          const patch = overrides[item.product_id];
+          return patch ? normalizeWatch({ ...item, ...patch }) : item;
+        });
       }
-
-      // If version mismatch or old cache detected, auto-migrate to latest enriched dataset
-      console.log('Migrating local catalog to latest enriched 991-watch master dataset...');
       localStorage.setItem('cw_catalog_version', CURRENT_CATALOG_VERSION);
-      const freshCatalog = (CRAWLED_WATCHES || []).map(normalizeWatch).filter(Boolean);
-      try {
-        localStorage.setItem('cw_products_catalog', JSON.stringify(freshCatalog));
-      } catch (e) {
-        console.warn('LocalStorage quota warning:', e);
-      }
-      return freshCatalog;
-    } catch (e) {
-      console.warn('Failed to parse local catalog:', e);
+      localStorage.removeItem('cw_products_catalog'); // clean old 12.9MB legacy cache
+      return base;
+    } catch {
+      return buildInitialV4Catalog();
     }
-    return (CRAWLED_WATCHES || []).map(normalizeWatch).filter(Boolean);
   });
 
-  const resetToMasterCatalog = () => {
-    localStorage.setItem('cw_catalog_version', CURRENT_CATALOG_VERSION);
-    const fresh = (CRAWLED_WATCHES || []).map(normalizeWatch).filter(Boolean);
-    setProducts(fresh);
+  // Save lightweight overrides (price, publication_status, brand edits) locally as instant cache alongside Supabase
+  const saveLocalOverride = (productId, patch) => {
     try {
-      localStorage.setItem('cw_products_catalog', JSON.stringify(fresh));
-    } catch (e) {
-      console.warn('LocalStorage quota warning:', e);
+      const raw = localStorage.getItem('cw_v4_product_overrides');
+      const map = raw ? JSON.parse(raw) : {};
+      map[productId] = { ...(map[productId] || {}), ...patch };
+      localStorage.setItem('cw_v4_product_overrides', JSON.stringify(map));
+    } catch {
+      // ignore localStorage quota/access warning
     }
-    return fresh.length;
   };
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('cw_products_catalog', JSON.stringify(products));
-    } catch (e) {
-      console.warn('LocalStorage quota exceeded for products:', e);
-    }
-  }, [products]);
-
-
-  // Google Sheet Integration State
-  const [googleSheetId, setGoogleSheetId] = useState(() => {
-    return localStorage.getItem('cw_sheet_id') || '';
-  });
-
-  const [syncStatus, setSyncStatus] = useState('IDLE'); // 'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'
+  // Supabase + R2 Sync State (replaces Google Sheets per D1-D4)
+  const [syncStatus, setSyncStatus] = useState('IDLE'); // 'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR' | 'LOCAL_SNAPSHOT'
   const [syncError, setSyncError] = useState(null);
   const [lastSyncTime, setLastSyncTime] = useState(() => {
     return localStorage.getItem('cw_last_sync_time') || null;
   });
+  const [importBatchReport, setImportBatchReport] = useState(null);
 
-  const syncWithGoogleSheet = async (customId = null) => {
-    const targetId = customId || googleSheetId;
-    if (!targetId) {
-      setSyncStatus('IDLE');
-      return;
-    }
-
+  const syncWithSupabase = async ({ includeUnpublished = true } = {}) => {
     setSyncStatus('SYNCING');
     setSyncError(null);
-
     try {
-      const liveProducts = await fetchGoogleSheetData(targetId);
-      if (liveProducts && liveProducts.length > 0) {
-        const normalized = liveProducts.map(normalizeWatch).filter(Boolean);
-        setProducts(normalized);
+      const rows = await fetchSupabaseCatalog({ includeUnpublished });
+      if (Array.isArray(rows) && rows.length > 0) {
+        const normalized = rows.map(normalizeWatch).filter(Boolean);
+        setAllProducts(normalized);
         const now = new Date().toLocaleTimeString();
         setLastSyncTime(now);
         setSyncStatus('SUCCESS');
         localStorage.setItem('cw_last_sync_time', now);
-        localStorage.setItem('cw_sheet_id', targetId);
       } else {
-        throw new Error('Google Sheet returned 0 valid products');
+        // Supabase reachable, table empty or 0 rows returned (e.g. all unpublished for anon)
+        setSyncStatus('LOCAL_SNAPSHOT');
       }
+      const batch = await fetchLatestImportBatch();
+      if (batch) setImportBatchReport(batch);
     } catch (err) {
-      console.error('Google Sheets Sync Failed:', err);
-      setSyncStatus('ERROR');
-      setSyncError(err.message || 'Failed to sync with Google Sheet');
+      setSyncStatus('LOCAL_SNAPSHOT');
+      setSyncError(err.message);
     }
   };
 
-  // Background Auto-sync (SWR pattern) on mount if Sheet ID exists
   useEffect(() => {
-    if (googleSheetId) {
-      syncWithGoogleSheet(googleSheetId);
-    }
-  }, [googleSheetId]);
+    syncWithSupabase({ includeUnpublished: true });
+  }, []);
+
+  const updateR2PublicUrl = (newUrl) => {
+    setR2PublicBaseUrl(newUrl);
+    setR2PublicUrlState(getR2PublicBaseUrl());
+    setAllProducts((prev) => prev.map((p) => normalizeWatch(p)));
+  };
+
+  // Storefront visible products:
+  // Strictly excludes legacy=true (BR-11).
+  // Shows published products; if 0 products are published yet (initial V4 state before Admin publishes first batch),
+  // shows V4 export_ready products that have valid brand and auto_matched/confirmed price so Storefront is never blank.
+  const storefrontProducts = useMemo(() => {
+    const nonLegacy = allProducts.filter((p) => !p.legacy && p.brand && p.variant1Price > 0);
+    const explicitlyPublished = nonLegacy.filter((p) => p.publication_status === 'published');
+    return explicitlyPublished.length > 0 ? explicitlyPublished : nonLegacy;
+  }, [allProducts]);
+
+  const resetToMasterCatalog = () => {
+    localStorage.removeItem('cw_v4_product_overrides');
+    localStorage.setItem('cw_catalog_version', CURRENT_CATALOG_VERSION);
+    const fresh = buildInitialV4Catalog();
+    setAllProducts(fresh);
+    return fresh.length;
+  };
 
   // Modals & Navigation
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -293,15 +384,14 @@ export function StoreProvider({ children }) {
     return () => window.removeEventListener('hashchange', checkHash);
   }, []);
 
-  // Dedicated Routing: /brands, /index-all-brands/:slug, etc.
   const parseCurrentUrl = () => {
     try {
       const path = window.location.pathname || '';
       const hash = window.location.hash || '';
-      
+
       const pathMatch = path.match(/\/index-all-brands\/([a-zA-Z0-9-_]+)/i);
       if (pathMatch) return { page: 'product', slug: pathMatch[1] };
-      
+
       const hashMatch = hash.match(/index-all-brands\/([a-zA-Z0-9-_]+)/i);
       if (hashMatch) return { page: 'product', slug: hashMatch[1] };
 
@@ -311,8 +401,8 @@ export function StoreProvider({ children }) {
       if (hash === '#/brands' || hash.startsWith('#/brands') || hash === '#brands') {
         return { page: 'brands', brand: 'All' };
       }
-    } catch (e) {
-      console.warn('URL parsing error:', e);
+    } catch {
+      // ignore URL parsing error
     }
     return { page: 'home', slug: null };
   };
@@ -322,34 +412,22 @@ export function StoreProvider({ children }) {
   const findProductBySlug = (slug) => {
     if (!slug) return null;
     const clean = String(slug).toLowerCase().trim();
-    
-    // 1. Direct Seamaster Diver 300M matching (per user request link)
-    if (clean.includes('seamaster') && clean.includes('300m')) {
-      const found = products.find(p => {
-        const n = (p.name || '').toLowerCase();
-        return n.includes('seamaster') && n.includes('300m');
-      });
-      if (found) return found;
-    }
 
-    // 2. Direct slug match
-    let found = products.find(p => getProductSlug(p) === clean || (p.id && p.id.toLowerCase() === clean));
+    let found = allProducts.find(
+      (p) =>
+        getProductSlug(p) === clean ||
+        (p.product_id && p.product_id.toLowerCase() === clean) ||
+        (p.id && p.id.toLowerCase() === clean)
+    );
     if (found) return found;
 
-    // 3. Partial slug match
-    found = products.find(p => {
+    found = allProducts.find((p) => {
       const pSlug = getProductSlug(p);
       return pSlug.includes(clean) || clean.includes(pSlug);
     });
     if (found) return found;
 
-    // 4. Model reference match
-    found = products.find(p => {
-      const ref = (p.dataSheet?.modelReference || p.modelCode || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      return ref && clean.replace(/[^a-z0-9]/g, '').includes(ref);
-    });
-
-    return found || products[0];
+    return storefrontProducts[0] || allProducts[0];
   };
 
   const navigateToProduct = (watchOrSlug) => {
@@ -366,7 +444,7 @@ export function StoreProvider({ children }) {
 
     setRoute({ page: 'product', slug });
     setDetailProduct(targetProduct);
-    setQuickViewProduct(null); // close quick view if opened
+    setQuickViewProduct(null);
 
     try {
       if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
@@ -414,7 +492,6 @@ export function StoreProvider({ children }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Sync route on popstate and hashchange
   useEffect(() => {
     const handleUrlChange = () => {
       const parsed = parseCurrentUrl();
@@ -432,7 +509,6 @@ export function StoreProvider({ children }) {
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
 
-    // Initial check
     if (route.page === 'product' && route.slug && !detailProduct) {
       setDetailProduct(findProductBySlug(route.slug));
     }
@@ -441,32 +517,38 @@ export function StoreProvider({ children }) {
       window.removeEventListener('popstate', handleUrlChange);
       window.removeEventListener('hashchange', handleUrlChange);
     };
-  }, [products]);
+  }, [allProducts]);
 
   // Cart state
   const [cart, setCart] = useState(() => {
+    const initialWatch = storefrontProducts[0] || allProducts[0];
     try {
       const saved = localStorage.getItem('cw_cart');
-      return saved ? JSON.parse(saved) : [
-        {
-          product: products[0] || CRAWLED_WATCHES[0],
-          variantName: 'VS / Clean 1:1 Super Clone',
-          priceUSD: (products[0] || CRAWLED_WATCHES[0])?.variant2Price || 1199,
-          quantity: 1
-        }
-      ];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {
-      return [{
-        product: products[0] || CRAWLED_WATCHES[0],
-        variantName: 'VS / Clean 1:1 Super Clone',
-        priceUSD: (products[0] || CRAWLED_WATCHES[0])?.variant2Price || 1199,
-        quantity: 1
-      }];
+      // ignore
     }
+    return initialWatch
+      ? [
+          {
+            product: initialWatch,
+            variantName: 'VS / Clean 1:1 Super Clone',
+            priceUSD: initialWatch.variant2Price || 1199,
+            quantity: 1
+          }
+        ]
+      : [];
   });
 
   useEffect(() => {
-    localStorage.setItem('cw_cart', JSON.stringify(cart));
+    try {
+      localStorage.setItem('cw_cart', JSON.stringify(cart));
+    } catch {
+      // ignore
+    }
   }, [cart]);
 
   // Coupon state
@@ -487,11 +569,9 @@ export function StoreProvider({ children }) {
     }
   });
 
-  // Filter & Search
   const [selectedBrand, setSelectedBrand] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Formatting helpers
   const formatPrice = (priceUSD) => {
     const rateInfo = CURRENCY_RATES[currency] || CURRENCY_RATES.USD;
     const converted = Number(priceUSD || 0) * rateInfo.rate;
@@ -503,7 +583,6 @@ export function StoreProvider({ children }) {
     return Number(priceUSD || 0) * rateInfo.rate;
   };
 
-  // Cart operations
   const addToCart = (product, quantity = 1, variantSelection = null) => {
     const selectedVariantName = variantSelection?.name || product.variant1Name || 'Swiss Movement';
     const selectedPrice = Number(variantSelection?.price || product.variant1Price || product.priceUSD || 700);
@@ -554,34 +633,71 @@ export function StoreProvider({ children }) {
     setCart([]);
   };
 
-  // Update a single product (used by Admin)
-  const updateProduct = (productId, updatedFields) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? normalizeWatch({ ...p, ...updatedFields }) : p))
+  // Update a single product (Admin CRUD -> Local state + Supabase Postgres)
+  const updateProduct = async (productId, updatedFields) => {
+    const dbPatch = {};
+    if ('brand' in updatedFields) dbPatch.brand = updatedFields.brand;
+    if ('collection' in updatedFields) dbPatch.collection = updatedFields.collection;
+    if ('name' in updatedFields || 'title' in updatedFields) dbPatch.title = updatedFields.title || updatedFields.name;
+    if ('nickname' in updatedFields) dbPatch.nickname = updatedFields.nickname || null;
+    if ('variant1Price' in updatedFields || 'variant1_price' in updatedFields) {
+      dbPatch.variant1_price = Number(updatedFields.variant1Price ?? updatedFields.variant1_price) || null;
+    }
+    if ('variant2Price' in updatedFields || 'variant2_price' in updatedFields) {
+      dbPatch.variant2_price = Number(updatedFields.variant2Price ?? updatedFields.variant2_price) || null;
+    }
+    if ('price_status' in updatedFields) dbPatch.price_status = updatedFields.price_status;
+    if ('price_source' in updatedFields) dbPatch.price_source = updatedFields.price_source;
+    if ('publication_status' in updatedFields) dbPatch.publication_status = updatedFields.publication_status;
+    if ('stock' in updatedFields) dbPatch.stock = updatedFields.stock;
+    if ('movement' in updatedFields) dbPatch.movement = updatedFields.movement;
+    if ('caseSize' in updatedFields || 'size_mm' in updatedFields) dbPatch.size_mm = updatedFields.size_mm || updatedFields.caseSize;
+    if ('material' in updatedFields || 'case_material' in updatedFields) dbPatch.case_material = updatedFields.case_material || updatedFields.material;
+    if ('waterResistance' in updatedFields) dbPatch.water_resistance = updatedFields.waterResistance;
+    if ('description' in updatedFields) dbPatch.description_html = updatedFields.description;
+
+    saveLocalOverride(productId, { ...updatedFields, ...dbPatch });
+
+    setAllProducts((prev) =>
+      prev.map((p) => (p.id === productId || p.product_id === productId ? normalizeWatch({ ...p, ...updatedFields, ...dbPatch }) : p))
     );
+
+    return updateSupabaseProduct(productId, dbPatch);
+  };
+
+  // Bulk update helper for Admin (approve price or publish in batch)
+  const bulkUpdateProducts = async (productIds, patch) => {
+    const idSet = new Set(productIds);
+    productIds.forEach((id) => saveLocalOverride(id, patch));
+    setAllProducts((prev) =>
+      prev.map((p) => (idSet.has(p.id) || idSet.has(p.product_id) ? normalizeWatch({ ...p, ...patch }) : p))
+    );
+    return bulkUpdateSupabaseProducts(productIds, patch);
   };
 
   const addProduct = (newProductData) => {
-    const normalized = normalizeWatch(newProductData);
-    setProducts((prev) => [normalized, ...prev]);
+    const normalized = normalizeWatch({
+      ...newProductData,
+      price_status: 'confirmed',
+      price_source: 'admin'
+    });
+    saveLocalOverride(normalized.product_id, normalized);
+    setAllProducts((prev) => [normalized, ...prev]);
     return normalized;
   };
 
   const deleteProduct = (productId) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    setAllProducts((prev) => prev.filter((p) => p.id !== productId && p.product_id !== productId));
   };
 
-  // Export & Import CSV helpers
   const exportCatalog = () => {
-    downloadCsv(products, `clonewatches_catalog_${new Date().toISOString().slice(0,10)}.csv`);
+    downloadCsv(allProducts, `clonewatches_v4_catalog_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   const importCatalogFromCsv = (csvText) => {
-    // Basic CSV parser
     const lines = csvText.trim().split(/\r?\n/);
     if (lines.length < 2) return 0;
-    
-    // Parse rows ignoring header
+
     const newItems = [];
     for (let i = 1; i < lines.length; i++) {
       const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
@@ -595,35 +711,38 @@ export function StoreProvider({ children }) {
       const name = clean(row[3]);
       if (!name) continue;
 
-      newItems.push(normalizeWatch({
-        id: clean(row[0]) || `cw-imported-${i}`,
-        brand: clean(row[1]) || 'Rolex',
-        collection: clean(row[2]) || 'Signature Collection',
-        name,
-        variant1Name: clean(row[4]) || 'Swiss Movement',
-        variant1Price: getNum(row[5], 700),
-        variant2Name: clean(row[6]) || 'VS / Clean 1:1 Super Clone',
-        variant2Price: getNum(row[7], 1199),
-        primaryImage: clean(row[8]) || 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80',
-        galleryImages: clean(row[9]).split(',').map(s => s.trim()).filter(Boolean),
-        movement: clean(row[10]) || 'Swiss Dandong Calibre',
-        caseSize: clean(row[11]) || '41mm',
-        material: clean(row[12]) || 'Solid 904L Oystersteel',
-        waterResistance: clean(row[13]) || '50m / 5 ATM Tested',
-        description: clean(row[14]) || '',
-        status: clean(row[15]) || 'ACTIVE',
-        stock: clean(row[16]) || 'IN_STOCK'
-      }));
+      newItems.push(
+        normalizeWatch({
+          product_id: clean(row[0]) || `P90${String(i).padStart(4, '0')}`,
+          brand: clean(row[1]) || 'Rolex',
+          collection: clean(row[2]) || 'Signature Collection',
+          title: name,
+          variant1Name: clean(row[4]) || 'Swiss Movement',
+          variant1_price: getNum(row[5], 700),
+          variant2Name: clean(row[6]) || 'VS / Clean 1:1 Super Clone',
+          variant2_price: getNum(row[7], 1199),
+          price_status: 'confirmed',
+          price_source: 'admin',
+          hero_image: clean(row[8]) || '',
+          images: clean(row[9]).split(',').map((s) => s.trim()).filter(Boolean),
+          movement: clean(row[10]) || 'Swiss Dandong Calibre',
+          size_mm: clean(row[11]) || '41mm',
+          case_material: clean(row[12]) || 'Solid 904L Oystersteel',
+          water_resistance: clean(row[13]) || '50m / 5 ATM Tested',
+          description_html: clean(row[14]) || '',
+          publication_status: clean(row[15]).toLowerCase() === 'published' ? 'published' : 'unpublished',
+          stock: clean(row[16]) || 'IN_STOCK'
+        })
+      );
     }
 
     if (newItems.length > 0) {
-      setProducts(newItems.filter(Boolean));
+      setAllProducts(newItems.filter(Boolean));
       return newItems.length;
     }
     return 0;
   };
 
-  // Calculations
   const cartSubtotalUSD = cart.reduce(
     (sum, item) => sum + (item.priceUSD || item.product.priceUSD || item.product.variant1Price || 700) * item.quantity,
     0
@@ -632,10 +751,7 @@ export function StoreProvider({ children }) {
 
   const freeShippingThreshold = 500;
   const freeShippingUnlocked = cartSubtotalUSD >= freeShippingThreshold;
-  const freeShippingProgress = Math.min(
-    100,
-    Math.round((cartSubtotalUSD / freeShippingThreshold) * 100)
-  );
+  const freeShippingProgress = Math.min(100, Math.round((cartSubtotalUSD / freeShippingThreshold) * 100));
 
   const applyCoupon = (code) => {
     const clean = code.trim().toUpperCase();
@@ -667,11 +783,15 @@ export function StoreProvider({ children }) {
     };
     setLastOrder(newOrder);
     localStorage.setItem('cw_last_order', JSON.stringify(newOrder));
+    recordOrderInSupabase({
+      ...newOrder,
+      currency,
+      items: orderData.items || cart
+    });
     clearCart();
     return newOrder;
   };
 
-  // WhatsApp Integration State & Actions
   const [whatsappNumber, setWhatsappNumberState] = useState(() => getStoreWhatsAppNumber());
 
   const updateWhatsappNumber = (newNumber) => {
@@ -723,7 +843,6 @@ export function StoreProvider({ children }) {
 
     const hasCustomerInfo = Boolean(customer?.fullName?.trim() && customer?.phone?.trim());
     if (!hasCustomerInfo) {
-      // Ensure product is in cart and open OnePageCheckout so customer fills in their info first
       setCart((prev) => {
         const existing = prev.find(
           (item) => item.product.id === watch.id && item.variantName === variantName
@@ -765,21 +884,26 @@ export function StoreProvider({ children }) {
         setCurrency,
         formatPrice,
         getRawConverted,
-        products,
-        setProducts,
-        watches: products,
-        googleSheetId,
-        setGoogleSheetId,
+        products: storefrontProducts,
+        adminProducts: allProducts,
+        setProducts: setAllProducts,
+        watches: storefrontProducts,
+        r2PublicUrl,
+        updateR2PublicUrl,
+        isS3EndpointWarning: isS3ApiEndpointInsteadOfPublicDev(r2PublicUrl),
         syncStatus,
         syncError,
         lastSyncTime,
-        syncWithGoogleSheet,
+        importBatchReport,
+        syncWithSupabase,
         updateProduct,
+        bulkUpdateProducts,
         addProduct,
         deleteProduct,
         exportCatalog,
         importCatalogFromCsv,
         resetToMasterCatalog,
+        evaluatePublishGate,
         cart,
         addToCart,
         removeFromCart,

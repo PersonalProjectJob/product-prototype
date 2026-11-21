@@ -82,10 +82,10 @@ export default function ProductDetailPage({ product, onBackToHome }) {
     ? product.images
     : (product.primaryImage ? [product.primaryImage] : []);
 
-  // Filter out standalone logo banner and repeated generic Daytona
+  // Filter out standalone logo banner and repeated generic Daytona; keep authentic V4 gallery order (BR-03)
   const watchImagesOnly = rawImages.filter(img => !isLogoOrPlaceholder(img));
   const images = watchImagesOnly.length > 0
-    ? [figmaImg, ...watchImagesOnly.filter(img => img !== figmaImg)]
+    ? watchImagesOnly
     : [figmaImg];
 
   const ds = product.dataSheet || {};
@@ -273,8 +273,34 @@ export default function ProductDetailPage({ product, onBackToHome }) {
               </div>
             )}
 
-            {/* Live QC Movement Preview Teaser */}
-            {(product.qcVideoVimeoId || product.qcVideoUrl) && (
+            {/* Live QC Movement Video Player (V4 MP4 + Poster per BR-04, or legacy Vimeo) */}
+            {Array.isArray(product.videos) && product.videos.length > 0 ? (
+              <div className="bg-black text-white p-4 rounded-xl flex flex-col gap-3 shadow-md border border-amber-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
+                    <div>
+                      <span className="text-xs font-bold block uppercase tracking-wider text-amber-400">
+                        V4 Verified QC Video ({product.videos.length})
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-mono">
+                        Poster derived from video &bull; Excluded from still photo count ({images.length} stills — BR-04)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {product.videos.map((vid) => (
+                  <video
+                    key={vid.video_id || vid.src}
+                    controls
+                    preload="metadata"
+                    poster={vid.posterUrl}
+                    src={vid.url}
+                    className="w-full max-h-[360px] rounded-lg bg-black border border-white/10"
+                  />
+                ))}
+              </div>
+            ) : (product.qcVideoVimeoId || product.qcVideoUrl) && (
               <div className="bg-black text-white p-4 rounded-xl flex items-center justify-between shadow-md border border-amber-500/30">
                 <div className="flex items-center gap-3">
                   <div className="w-3 h-3 bg-red-500 rounded-full animate-ping" />
@@ -318,6 +344,22 @@ export default function ProductDetailPage({ product, onBackToHome }) {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-black tracking-tight leading-tight">
                 {product.name}
               </h1>
+
+              {product.nickname && (
+                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300/70 rounded-lg flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-black text-amber-300 text-[11px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                      Nickname: &ldquo;{product.nickname}&rdquo;
+                    </span>
+                    {product.product_id && (
+                      <span className="text-xs font-mono text-gray-600">Product ID: {product.product_id}</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-600">
+                    ⓘ Tên gọi mô tả kiểu dáng, không xác nhận reference hay tính chính hãng (BR-08).
+                  </p>
+                </div>
+              )}
 
               {/* Subtitle / Case dimension headline */}
               <p className="text-xs sm:text-sm text-gray-500 mt-1 font-medium">

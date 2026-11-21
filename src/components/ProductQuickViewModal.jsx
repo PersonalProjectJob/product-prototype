@@ -190,9 +190,25 @@ export default function ProductQuickViewModal() {
                 <span className="text-xs font-mono text-obsidian-800/60">{watch.modelCode || watch.spu}</span>
               </div>
 
-              <h2 className="text-lg sm:text-xl font-bold uppercase tracking-tight text-obsidian-950 mb-3">
+              <h2 className="text-lg sm:text-xl font-bold uppercase tracking-tight text-obsidian-950 mb-2">
                 {watch.name}
               </h2>
+
+              {watch.nickname && (
+                <div className="mb-3 p-2.5 bg-amber-50/80 border border-amber-300/60 rounded-xs flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-obsidian-950 text-gold-400 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
+                      Nickname: &ldquo;{watch.nickname}&rdquo;
+                    </span>
+                    {watch.product_id && (
+                      <span className="text-[11px] font-mono text-obsidian-800/70">ID: {watch.product_id}</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-obsidian-800/75 leading-snug">
+                    ⓘ Tên gọi mô tả kiểu dáng, không xác nhận reference hay tính chính hãng (BR-08).
+                  </p>
+                </div>
+              )}
 
               {/* Price Row */}
               <div className="flex items-baseline gap-3 mb-4 pb-4 border-b border-obsidian-800/10">
@@ -284,7 +300,7 @@ export default function ProductQuickViewModal() {
                 >
                   Data Sheet
                 </button>
-                {(watch.qcVideoVimeoId || watch.qcVideoUrl) && (
+                {((Array.isArray(watch.videos) && watch.videos.length > 0) || watch.qcVideoVimeoId || watch.qcVideoUrl) && (
                   <button
                     type="button"
                     onClick={() => setActiveTab('video')}
@@ -295,7 +311,7 @@ export default function ProductQuickViewModal() {
                     }`}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-crimson-600 animate-pulse"></span>
-                    QC Video
+                    QC Video {Array.isArray(watch.videos) && watch.videos.length > 0 ? `(${watch.videos.length})` : ''}
                   </button>
                 )}
               </div>
@@ -446,24 +462,40 @@ export default function ProductQuickViewModal() {
                 </div>
               )}
 
-              {activeTab === 'video' && (watch.qcVideoVimeoId || watch.qcVideoUrl) && (
-                /* Live QC Movement Video Tab */
+              {activeTab === 'video' && ((Array.isArray(watch.videos) && watch.videos.length > 0) || watch.qcVideoVimeoId || watch.qcVideoUrl) && (
+                /* Live QC Movement Video Tab — supports R2 MP4 + Poster (BR-04) and legacy Vimeo */
                 <div className="space-y-3 mb-6 animate-in fade-in duration-150">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold uppercase tracking-wider text-obsidian-950">Live Calibre Sweep &amp; Timegrapher QC Video</span>
                     <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5">Verified 1:1 Rate</span>
                   </div>
-                  <div className="relative pb-[56.25%] h-0 bg-black border border-obsidian-800/20 overflow-hidden shadow-inner">
-                    <iframe
-                      src={`https://player.vimeo.com/video/${watch.qcVideoVimeoId || '1155540056'}?autoplay=0&loop=1`}
-                      title={watch.name}
-                      className="absolute top-0 left-0 w-full h-full"
-                      allow="autoplay; fullscreen; picture-in-picture"
-                      allowFullScreen
-                    />
-                  </div>
+                  {Array.isArray(watch.videos) && watch.videos.length > 0 ? (
+                    <div className="space-y-3">
+                      {watch.videos.map((vid) => (
+                        <div key={vid.video_id || vid.src} className="bg-black border border-obsidian-800/20 overflow-hidden shadow-inner">
+                          <video
+                            controls
+                            preload="metadata"
+                            poster={vid.posterUrl}
+                            src={vid.url}
+                            className="w-full max-h-[340px] object-contain bg-black"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="relative pb-[56.25%] h-0 bg-black border border-obsidian-800/20 overflow-hidden shadow-inner">
+                      <iframe
+                        src={`https://player.vimeo.com/video/${watch.qcVideoVimeoId || '1155540056'}?autoplay=0&loop=1`}
+                        title={watch.name}
+                        className="absolute top-0 left-0 w-full h-full"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  )}
                   <p className="text-[11px] text-obsidian-800/70 italic">
-                    Actual factory footage verifying smooth 28,800 VPH sweep and mechanical functionality.
+                    Actual factory footage verifying smooth 28,800 VPH sweep and mechanical functionality. Poster derived from video and excluded from gallery count (BR-04).
                   </p>
                 </div>
               )}
