@@ -146,14 +146,17 @@ export default function CollectionByBrandsSection() {
           {watch.name}
         </h3>
 
-        {/* Price (16px DM Sans Medium, line-height 24px, color #0D0D0D) */}
-        <div className="flex items-baseline justify-between mt-auto pt-1">
-          <p className="text-[16px] leading-6 font-medium text-[#0D0D0D]">
-            {formatPrice(displayPrice)}
-            <span className="text-[12px] text-gray-500 font-normal ml-1.5">
-              &ndash; {formatPrice(v2Price)}
-            </span>
-          </p>
+        {/* Contact for Price (1-Click WhatsApp Push) */}
+        <div className="flex items-center justify-between mt-auto pt-1">
+          <button
+            type="button"
+            onClick={(e) => handleQuickWhatsApp(e, watch)}
+            className="inline-flex items-center gap-1.5 text-[14px] sm:text-[15px] leading-6 font-bold text-[#008A38] hover:text-[#00742f] transition-colors"
+            title="Bấm để đẩy toàn bộ thông tin đồng hồ qua WhatsApp và nhận báo giá"
+          >
+            <WhatsAppIcon className="w-4 h-4 text-[#25D366] flex-shrink-0" />
+            <span>Giá: Liên hệ</span>
+          </button>
           <span className="text-[10px] text-emerald-700 font-medium uppercase tracking-wider">
             4K QC Video
           </span>

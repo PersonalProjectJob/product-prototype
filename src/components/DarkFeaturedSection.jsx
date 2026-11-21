@@ -189,15 +189,18 @@ export default function DarkFeaturedSection() {
                   {watch.name}
                 </h3>
 
-                {/* Price (16px DM Sans Medium, line-height 24px) */}
-                <div className="text-[16px] leading-6 font-medium text-white mt-auto flex items-baseline justify-between">
-                  <div>
-                    {formatPrice(v1Price)}
-                    <span className="text-[12px] text-neutral-400 font-normal ml-1.5">
-                      &ndash; {formatPrice(v2Price)}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-emerald-400 font-medium">
+                {/* Contact for Price (1-Click WhatsApp Push) */}
+                <div className="text-[15px] leading-6 font-bold text-emerald-400 mt-auto flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={(e) => handleQuickWhatsApp(e, watch)}
+                    className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors"
+                    title="Bấm để đẩy toàn bộ thông tin đồng hồ qua WhatsApp và nhận báo giá"
+                  >
+                    <WhatsAppIcon className="w-4 h-4 text-[#25D366] flex-shrink-0" />
+                    <span>Giá: Liên hệ</span>
+                  </button>
+                  <span className="text-[10px] text-neutral-400 font-medium">
                     1:1 CLONE
                   </span>
                 </div>

@@ -78,11 +78,6 @@ export function evaluatePublishGate(product) {
   if (product.export_status && product.export_status !== 'export_ready') {
     reasons.push(`Trạng thái media (${product.export_status}) chưa sẵn sàng xuất bản (BR-07)`);
   }
-  const v1Price = Number(product.variant1_price ?? product.variant1Price ?? 0);
-  const priceStatus = product.price_status || product.priceStatus || 'missing';
-  if (!v1Price || v1Price <= 0 || priceStatus === 'missing' || priceStatus === 'crawled') {
-    reasons.push('Chưa có giá hợp lệ được duyệt hoặc tự khớp (BR-06 / BR-17)');
-  }
   return {
     canPublish: reasons.length === 0,
     reasons,

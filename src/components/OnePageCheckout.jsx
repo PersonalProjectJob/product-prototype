@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   ShieldCheck,
@@ -7,6 +7,7 @@ import {
   Copy,
   Check,
   QrCode,
+  RotateCcw,
   ExternalLink
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
@@ -55,6 +56,8 @@ export default function OnePageCheckout() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderCompletedData, setOrderCompletedData] = useState(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
+  const [customOrderMessage, setCustomOrderMessage] = useState('');
+  const [isOrderMessageDirty, setIsOrderMessageDirty] = useState(false);
 
   // Pricing math
   const discountAmountUSD = appliedCoupon
@@ -83,6 +86,19 @@ export default function OnePageCheckout() {
       notes: activeCustomer.notes || ''
     });
   }, [formData, cart, finalTotalUSD, appliedCoupon, shippingFeeUSD, orderCompletedData, formatPrice]);
+
+  useEffect(() => {
+    if (!isOrderMessageDirty) {
+      setCustomOrderMessage(liveOrderPreviewMessage);
+    }
+  }, [liveOrderPreviewMessage, isOrderMessageDirty]);
+
+  const activeOrderMessageToSend = (customOrderMessage || liveOrderPreviewMessage).trim();
+
+  const handleResetOrderMessage = () => {
+    setIsOrderMessageDirty(false);
+    setCustomOrderMessage(liveOrderPreviewMessage);
+  };
 
   if (!isCheckoutOpen) return null;
 
@@ -168,7 +184,10 @@ export default function OnePageCheckout() {
         totalFormatted: formatPrice(finalTotalUSD),
         coupon: appliedCoupon,
         shippingFee: shippingFeeUSD,
-        notes: formData.notes
+        notes: formData.notes,
+        customMessage: isOrderMessageDirty
+          ? activeOrderMessageToSend.replace(/CW-PREVIEW/g, order.orderId)
+          : ''
       });
     }, 500);
   };
@@ -272,31 +291,47 @@ export default function OnePageCheckout() {
                   </div>
                 </div>
 
-                {/* Formatted WhatsApp Message Box */}
+                {/* Formatted WhatsApp Message Box (Editable) */}
                 <div className="flex-1 flex flex-col border border-obsidian-800/15 rounded-xl overflow-hidden bg-white">
                   <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
-                    <span className="font-semibold truncate min-w-0">Nội dung đơn hàng WhatsApp:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyMessage(liveOrderPreviewMessage)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
-                    >
-                      {copiedMessage ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                          <span className="text-emerald-300">Đã sao chép</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 flex-shrink-0" />
-                          <span>Sao chép tin nhắn</span>
-                        </>
-                      )}
-                    </button>
+                    <span className="font-semibold truncate min-w-0">Nội dung đơn hàng WhatsApp (Có thể chỉnh sửa):</span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleResetOrderMessage}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[10px] font-semibold transition-colors whitespace-nowrap"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Mặc định</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(activeOrderMessageToSend)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
+                      >
+                        {copiedMessage ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                            <span className="text-emerald-300">Đã sao chép</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 flex-shrink-0" />
+                            <span>Sao chép tin nhắn</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap break-words max-h-40 overflow-y-auto overflow-x-hidden bg-neutral-50 leading-relaxed">
-                    {liveOrderPreviewMessage}
-                  </pre>
+                  <textarea
+                    rows={6}
+                    value={customOrderMessage}
+                    onChange={(e) => {
+                      setCustomOrderMessage(e.target.value);
+                      setIsOrderMessageDirty(true);
+                    }}
+                    className="p-3 text-[11px] font-mono text-obsidian-900 bg-neutral-50 leading-relaxed focus:outline-none focus:bg-white w-full"
+                  />
                 </div>
               </div>
             </div>
@@ -314,7 +349,8 @@ export default function OnePageCheckout() {
                     totalFormatted: formatPrice(orderCompletedData.totalUSD),
                     coupon: appliedCoupon,
                     shippingFee: shippingFeeUSD,
-                    notes: orderCompletedData.customer.notes
+                    notes: orderCompletedData.customer.notes,
+                    customMessage: activeOrderMessageToSend
                   });
                 }}
                 className="w-full px-4 py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider flex items-center justify-center gap-2 shadow-md transition-all whitespace-nowrap"
@@ -526,37 +562,55 @@ export default function OnePageCheckout() {
                     </div>
                   </div>
 
-                  {/* Live Preview of Customer + Order Info to be pushed to WhatsApp */}
+                  {/* Live Editable Preview of Customer + Order Info to be pushed to WhatsApp */}
                   <div className="border border-emerald-200 bg-white overflow-hidden">
                     <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
                       <span className="font-semibold flex items-center gap-1.5 min-w-0">
                         <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366] flex-shrink-0" />
                         <span className="truncate">
-                          <span className="sm:hidden">Xem trước tin nhắn:</span>
-                          <span className="hidden sm:inline">Bản xem trước tin nhắn đơn hàng gửi qua WhatsApp:</span>
+                          <span className="sm:hidden">Sửa tin nhắn gửi:</span>
+                          <span className="hidden sm:inline">Nội dung tin nhắn gửi WhatsApp (Có thể chỉnh sửa trực tiếp):</span>
                         </span>
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyMessage(liveOrderPreviewMessage)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
-                      >
-                        {copiedMessage ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                            <span className="text-emerald-300">Đã copy!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 flex-shrink-0" />
-                            <span>Copy nội dung</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleResetOrderMessage}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[10px] font-semibold transition-colors whitespace-nowrap"
+                          title="Khôi phục nội dung mặc định"
+                        >
+                          <RotateCcw className="w-3 h-3 flex-shrink-0" />
+                          <span>Mặc định</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyMessage(activeOrderMessageToSend)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
+                        >
+                          {copiedMessage ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              <span className="text-emerald-300">Đã copy!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 flex-shrink-0" />
+                              <span>Copy nội dung</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap break-words max-h-36 overflow-y-auto overflow-x-hidden bg-neutral-50/80 leading-relaxed">
-                      {liveOrderPreviewMessage}
-                    </pre>
+                    <textarea
+                      rows={6}
+                      aria-label="Nội dung tin nhắn đơn hàng gửi qua WhatsApp"
+                      value={customOrderMessage}
+                      onChange={(e) => {
+                        setCustomOrderMessage(e.target.value);
+                        setIsOrderMessageDirty(true);
+                      }}
+                      className="w-full p-3 text-[11px] font-mono text-obsidian-900 bg-neutral-50/80 focus:bg-white focus:outline-none leading-relaxed"
+                    />
                   </div>
                 </div>
               </div>
@@ -592,11 +646,11 @@ export default function OnePageCheckout() {
                           <div className="min-w-0">
                             <p className="font-bold text-obsidian-950 truncate max-w-[180px]">{product.name}</p>
                             <p className="text-[10px] text-obsidian-800/60 font-mono">
-                              <span className="text-gold-700 font-semibold">{variantName || 'Swiss Movement'}</span> &bull; SL: {quantity} &times; {formatPrice(unitRate)}
+                              <span className="text-gold-700 font-semibold">{variantName || 'Swiss Movement'}</span> &bull; SL: {quantity}
                             </p>
                           </div>
                         </div>
-                        <span className="font-mono font-bold flex-shrink-0">{formatPrice(unitRate * quantity)}</span>
+                        <span className="font-mono font-bold text-[#008A38] flex-shrink-0">Giá: Liên hệ</span>
                       </div>
                     );
                   })}
@@ -605,32 +659,21 @@ export default function OnePageCheckout() {
                 {/* Calculation Breakdown */}
                 <div className="space-y-2 text-xs pt-4 border-t border-obsidian-800/10">
                   <div className="flex justify-between text-obsidian-800/70">
-                    <span>Tạm tính (Subtotal):</span>
-                    <span className="font-mono">{formatPrice(cartSubtotalUSD)}</span>
+                    <span>Số lượng sản phẩm:</span>
+                    <span className="font-mono font-bold">{cartCount} chiếc</span>
                   </div>
-
-                  {appliedCoupon && (
-                    <div className="flex justify-between text-emerald-700 font-semibold">
-                      <span>Mã ưu đãi VIP ({appliedCoupon.code} -{appliedCoupon.discountPercent}%):</span>
-                      <span className="font-mono">-{formatPrice(discountAmountUSD)}</span>
-                    </div>
-                  )}
 
                   <div className="flex justify-between text-obsidian-800/70">
                     <span>Vận chuyển nhanh (DHL Express):</span>
-                    <span className="font-mono font-medium">
-                      {freeShippingUnlocked ? (
-                        <span className="text-emerald-700 font-bold">MIỄN PHÍ ($0)</span>
-                      ) : (
-                        formatPrice(35)
-                      )}
+                    <span className="font-mono font-bold text-emerald-700">
+                      MIỄN PHÍ / BÁO KÈM ĐƠN
                     </span>
                   </div>
 
                   <div className="flex justify-between text-base font-extrabold text-obsidian-950 pt-3 border-t border-obsidian-800/20">
-                    <span>Tổng Cộng (Total):</span>
-                    <span className="font-mono text-xl text-gold-600">
-                      {formatPrice(finalTotalUSD)}
+                    <span>Báo Giá (Price):</span>
+                    <span className="font-mono text-base text-[#008A38]">
+                      Giá: Liên hệ qua WhatsApp
                     </span>
                   </div>
                 </div>
