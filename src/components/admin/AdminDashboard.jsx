@@ -651,7 +651,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold uppercase tracking-wider text-[11px] whitespace-nowrap"
+                  className="px-3 py-1.5 bg-obsidian-950 hover:bg-obsidian-800 text-gold-400 font-bold uppercase tracking-wider text-[11px] whitespace-nowrap border border-gold-500/40"
                 >
                   Cập nhật R2 Public URL
                 </button>
@@ -703,28 +703,28 @@ export default function AdminDashboard() {
 
             {/* Top Metrics Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-              <div className="bg-white border border-obsidian-800/10 p-3.5 sm:p-4 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-obsidian-800/60 uppercase font-semibold">
+              <div className="bg-white border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs text-obsidian-800 uppercase font-bold">
                   <span>V4 Products</span>
                   <Package className="w-4 h-4 text-gold-600" />
                 </div>
                 <div className="text-2xl sm:text-3xl font-extrabold font-mono text-obsidian-950 mt-1">
                   {stats.total}
                 </div>
-                <div className="text-[11px] text-obsidian-800/60 mt-1 font-mono">
+                <div className="text-[11px] text-obsidian-800 mt-1 font-mono font-medium">
                   {stats.uniqueBrands} Brands &bull; {stats.withNickname} Nicknames
                 </div>
               </div>
 
-              <div className="bg-white border border-obsidian-800/10 p-3.5 sm:p-4 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-semibold">
+              <div className="bg-white border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-bold">
                   <span>Giá Tự Khớp / Duyệt</span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-700 mt-1">
+                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-800 mt-1">
                   {stats.autoMatched + stats.confirmedPrice}
                 </div>
-                <div className="text-[11px] text-emerald-700/80 mt-1 font-mono">
+                <div className="text-[11px] text-emerald-800 mt-1 font-mono font-medium">
                   Tự khớp: {stats.autoMatched} &bull; Đã duyệt: {stats.confirmedPrice}
                 </div>
               </div>
@@ -735,26 +735,26 @@ export default function AdminDashboard() {
                   setSelectedPriceStatus('missing');
                   setShowLegacyOnly(false);
                 }}
-                className="bg-white hover:bg-amber-50/40 border border-obsidian-800/10 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
+                className="bg-white hover:bg-amber-50 border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
                 title="Bấm để lọc các sản phẩm thiếu giá hoặc thiếu brand"
               >
-                <div className="flex items-center justify-between text-xs text-amber-800 uppercase font-semibold">
+                <div className="flex items-center justify-between text-xs text-amber-900 uppercase font-bold">
                   <span>Cần Bổ Sung Giá/Brand</span>
-                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <AlertCircle className="w-4 h-4 text-amber-700" />
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-700 mt-1">
+                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-900 mt-1">
                   {stats.missingPrice}
                 </div>
-                <div className="text-[11px] text-amber-800/80 mt-1 font-mono">
+                <div className="text-[11px] text-amber-900 mt-1 font-mono font-medium">
                   Trống brand: {stats.missingBrand} &bull; Xuất bản: {stats.published}
                 </div>
               </div>
 
               <div
                 onClick={() => setIsSettingsOpen(true)}
-                className="bg-white hover:bg-neutral-50 border border-obsidian-800/10 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
+                className="bg-white hover:bg-neutral-50 border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
               >
-                <div className="flex items-center justify-between text-xs text-obsidian-800/60 uppercase font-semibold">
+                <div className="flex items-center justify-between text-xs text-obsidian-800 uppercase font-bold">
                   <span>Supabase + R2 CDN</span>
                   <Database className="w-4 h-4 text-gold-600" />
                 </div>
@@ -762,34 +762,34 @@ export default function AdminDashboard() {
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
                       syncStatus === 'SUCCESS'
-                        ? 'bg-emerald-500'
+                        ? 'bg-emerald-600'
                         : syncStatus === 'SYNCING'
                         ? 'bg-gold-500 animate-pulse'
-                        : 'bg-amber-500'
+                        : 'bg-amber-600'
                     }`}
                   />
                   <span className="text-xs sm:text-sm font-bold font-mono text-obsidian-950 uppercase truncate">
                     {syncStatus === 'SUCCESS' ? 'SUPABASE LIVE' : 'V4 SNAPSHOT + R2'}
                   </span>
                 </div>
-                <div className="text-[10px] text-obsidian-800/60 font-mono mt-1 truncate">
+                <div className="text-[10px] text-obsidian-800 font-mono font-medium mt-1 truncate">
                   {stats.totalImages.toLocaleString()} ảnh &bull; {stats.totalVideos} video trên R2
                 </div>
               </div>
 
               <div
                 onClick={() => setIsWhatsappModalOpen(true)}
-                className="col-span-2 md:col-span-1 bg-emerald-50/40 hover:bg-emerald-50 border border-[#25D366]/40 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors group"
+                className="col-span-2 md:col-span-1 bg-white hover:bg-neutral-50 border-2 border-emerald-700 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors group"
                 title="Bấm để cài đặt nhanh số điện thoại WhatsApp nhận đơn hàng"
               >
-                <div className="flex items-center justify-between text-xs text-[#008A38] uppercase font-bold">
+                <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-extrabold">
                   <span>WhatsApp Owner</span>
-                  <WhatsAppIcon className="w-4 h-4 text-[#25D366]" />
+                  <WhatsAppIcon className="w-4 h-4 text-emerald-700" />
                 </div>
                 <div className="text-sm sm:text-base font-extrabold font-mono text-obsidian-950 mt-1.5 truncate">
                   {activeFormattedPhone}
                 </div>
-                <div className="text-[10px] text-[#008A38] font-semibold mt-1 flex items-center justify-between gap-1">
+                <div className="text-[11px] text-emerald-800 font-bold mt-1 flex items-center justify-between gap-1">
                   <span className="truncate">{WHATSAPP_CONTACT_NAME}</span>
                   <span className="underline group-hover:text-obsidian-950 flex-shrink-0">Sửa SĐT &rarr;</span>
                 </div>
@@ -925,9 +925,9 @@ export default function AdminDashboard() {
 
                 <button
                   onClick={() => setIsWhatsappModalOpen(true)}
-                  className="px-3 py-2 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#008A38] text-xs font-bold uppercase tracking-wider border border-[#25D366]/50 transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-3 py-2 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold uppercase tracking-wider border-2 border-emerald-700 transition-all flex items-center gap-1.5 shadow-sm"
                 >
-                  <WhatsAppIcon className="w-3.5 h-3.5 text-[#008A38]" />
+                  <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700" />
                   <span>WhatsApp ({activeFormattedPhone})</span>
                 </button>
 
@@ -1011,10 +1011,10 @@ export default function AdminDashboard() {
             {/* Quick Inline WhatsApp Phone Setup Bar */}
             <form
               onSubmit={handleSaveWhatsappDirect}
-              className="bg-emerald-50/50 border border-[#25D366]/40 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3"
+              className="bg-white border-2 border-emerald-700 p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3"
             >
               <div className="flex items-start sm:items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#25D366] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                <div className="w-9 h-9 rounded-lg bg-emerald-700 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
                   <WhatsAppIcon className="w-5 h-5" />
                 </div>
                 <div>
@@ -1022,31 +1022,31 @@ export default function AdminDashboard() {
                     <span className="text-xs font-extrabold uppercase tracking-wider text-obsidian-950">
                       Cài Đặt Nhanh Số Điện Thoại WhatsApp Nhận Đơn Hàng
                     </span>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#25D366]/20 text-[#008A38]">
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-800 text-white">
                       Đang dùng: {activeFormattedPhone}
                     </span>
                   </div>
-                  <p className="text-[11px] text-obsidian-800/70 mt-0.5">
-                    Nhập SĐT dạng <code className="font-mono bg-white px-1 border border-obsidian-800/10">0977889986</code> hoặc <code className="font-mono bg-white px-1 border border-obsidian-800/10">+84 97 788 99 86</code> — tự động chuẩn hóa sang <code className="font-mono text-[#008A38]">wa.me/{previewCleanPhone}</code>
+                  <p className="text-[11px] text-obsidian-800 font-medium mt-0.5">
+                    Nhập SĐT dạng <code className="font-mono bg-neutral-100 text-obsidian-950 px-1 border border-obsidian-800/20">0977889986</code> hoặc <code className="font-mono bg-neutral-100 text-obsidian-950 px-1 border border-obsidian-800/20">+84 97 788 99 86</code> — tự động chuẩn hóa sang <code className="font-mono font-bold text-emerald-800">wa.me/{previewCleanPhone}</code>
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                 <div className="relative flex-1 sm:w-64">
-                  <Phone className="w-3.5 h-3.5 text-obsidian-800/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Phone className="w-3.5 h-3.5 text-obsidian-800 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={tempWhatsapp}
                     onChange={(e) => setTempWhatsapp(e.target.value)}
                     placeholder="VD: 0977889986 hoặc 84977889986"
-                    className="w-full bg-white border border-obsidian-800/20 focus:border-[#008A38] focus:outline-none pl-8 pr-3 py-2 text-xs font-mono font-bold text-obsidian-950"
+                    className="w-full bg-white border border-obsidian-800/30 focus:border-emerald-700 focus:outline-none pl-8 pr-3 py-2 text-xs font-mono font-bold text-obsidian-950"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#008A38] hover:bg-[#00742f] text-white text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs cursor-pointer"
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Lưu SĐT</span>
@@ -1056,7 +1056,7 @@ export default function AdminDashboard() {
                   href={generateWhatsAppUrl('Xin chào Thanh Phuong Luxury Watch, kiểm tra kết nối SĐT WhatsApp từ Admin!', previewCleanPhone)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-2 bg-white hover:bg-neutral-100 text-[#008A38] border border-[#25D366]/50 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 whitespace-nowrap"
+                  className="px-3 py-2 bg-white hover:bg-neutral-100 text-emerald-800 border border-emerald-700 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 whitespace-nowrap"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Test Chat</span>
@@ -1065,7 +1065,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={handleResetWhatsappDefault}
-                  className="px-2.5 py-2 bg-white hover:bg-neutral-100 text-obsidian-800/70 hover:text-obsidian-950 border border-obsidian-800/15 text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
+                  className="px-2.5 py-2 bg-white hover:bg-neutral-100 text-obsidian-900 hover:text-obsidian-950 border border-obsidian-800/30 text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span className="hidden xl:inline">Mặc định</span>
@@ -1265,7 +1265,7 @@ export default function AdminDashboard() {
                                       </span>
                                     )}
                                     {p.dial_color && (
-                                      <span className="text-[10px] text-obsidian-800/60 font-mono">
+                                      <span className="text-[10px] text-obsidian-800 font-mono">
                                         &bull; {p.dial_color}
                                       </span>
                                     )}
@@ -1330,7 +1330,7 @@ export default function AdminDashboard() {
                                   </div>
                                 )}
 
-                                <span className="text-obsidian-800/30">/</span>
+                                <span className="text-obsidian-800 font-mono">/</span>
 
                                 {inlineEditing?.id === p.id && inlineEditing.field === 'variant2Price' ? (
                                   <div className="flex items-center gap-1">
@@ -1499,7 +1499,7 @@ export default function AdminDashboard() {
 
               {/* Table Pagination Bar */}
               <div className="p-4 border-t border-obsidian-800/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                <span className="text-obsidian-800/60 font-mono">
+                <span className="text-obsidian-800 font-mono font-medium">
                   Showing {(currentPage - 1) * itemsPerPage + 1} &ndash;{' '}
                   {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length} items
                 </span>
