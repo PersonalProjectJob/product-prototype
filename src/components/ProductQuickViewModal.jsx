@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { getWatchShowcase } from '../utils/watchShowcase';
-import { X, Check, ShoppingBag, ShieldCheck, Star, Truck, Award, Sparkles, CheckCircle2, ExternalLink } from 'lucide-react';
+import { buildWhatsAppQuickProductMessage } from '../services/whatsappService';
+import { X, Check, ShoppingBag, ShieldCheck, Star, Truck, Award, Sparkles, CheckCircle2, ExternalLink, RotateCcw } from 'lucide-react';
 import WhatsAppIcon from './common/WhatsAppIcon';
 
 export default function ProductQuickViewModal() {
@@ -24,6 +25,32 @@ export default function ProductQuickViewModal() {
   const [quickName, setQuickName] = useState('');
   const [quickPhone, setQuickPhone] = useState('');
   const [quickAddress, setQuickAddress] = useState('');
+  const [customQuickMessage, setCustomQuickMessage] = useState('');
+  const [isQuickMessageDirty, setIsQuickMessageDirty] = useState(false);
+
+  const generatedQuickWaMessage = useMemo(() => {
+    if (!quickViewProduct) return '';
+    const vName =
+      variantIndex === 0
+        ? quickViewProduct.variant1Name || 'Swiss Movement'
+        : quickViewProduct.variant2Name || 'VS / Clean 1:1 Super Clone';
+    return buildWhatsAppQuickProductMessage({
+      watch: quickViewProduct,
+      variantName: vName,
+      quantity,
+      customer: {
+        fullName: quickName.trim(),
+        phone: quickPhone.trim(),
+        address: quickAddress.trim()
+      }
+    });
+  }, [quickViewProduct, variantIndex, quantity, quickName, quickPhone, quickAddress]);
+
+  useEffect(() => {
+    if (!isQuickMessageDirty) {
+      setCustomQuickMessage(generatedQuickWaMessage);
+    }
+  }, [generatedQuickWaMessage, isQuickMessageDirty]);
 
   if (!quickViewProduct) return null;
 
@@ -86,7 +113,8 @@ export default function ProductQuickViewModal() {
         fullName: quickName.trim(),
         phone: quickPhone.trim(),
         address: quickAddress.trim()
-      }
+      },
+      customMessage: (customQuickMessage || generatedQuickWaMessage).trim()
     });
   };
 
@@ -210,16 +238,19 @@ export default function ProductQuickViewModal() {
                 </div>
               )}
 
-              {/* Price Row */}
-              <div className="flex items-baseline gap-3 mb-4 pb-4 border-b border-obsidian-800/10">
-                <span className="text-2xl sm:text-3xl font-extrabold font-mono text-obsidian-950">
-                  {formatPrice(currentVariant.price)}
-                </span>
-                <span className="text-sm font-mono text-obsidian-800/40 line-through">
-                  {formatPrice(watch.originalPriceUSD)}
-                </span>
-                <span className="bg-crimson-600 text-white text-[11px] font-bold px-2 py-0.5">
-                  Save {formatPrice(Math.max(0, (watch.originalPriceUSD || 0) - currentVariant.price))}
+              {/* Price Row -> Contact for Price (Giá: Liên hệ) 1-Click WhatsApp Push */}
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-obsidian-800/10">
+                <button
+                  type="button"
+                  onClick={handleOrderViaWhatsApp}
+                  className="inline-flex items-center gap-2 text-2xl sm:text-3xl font-extrabold font-mono text-[#008A38] hover:text-[#00742f] transition-colors cursor-pointer"
+                  title="Bấm để đẩy toàn bộ thông tin đồng hồ này qua WhatsApp"
+                >
+                  <WhatsAppIcon className="w-6 h-6 text-[#25D366] flex-shrink-0" />
+                  <span>Giá: Liên hệ</span>
+                </button>
+                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold px-2.5 py-1">
+                  Bấm để gửi thông tin &amp; nhận báo giá qua WhatsApp
                 </span>
               </div>
 
@@ -253,8 +284,8 @@ export default function ProductQuickViewModal() {
                             </span>
                           </div>
                         </div>
-                        <div className="font-mono font-extrabold text-sm text-gold-600 mb-1">
-                          {formatPrice(v.price)}
+                        <div className="font-mono font-extrabold text-xs text-[#008A38] mb-1">
+                          Giá: Liên hệ
                         </div>
                         <p className="text-[10px] text-obsidian-800/70 leading-relaxed">
                           {v.desc}
@@ -514,7 +545,7 @@ export default function ProductQuickViewModal() {
                     className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-extrabold uppercase tracking-widest shadow-md transition-all flex items-center justify-center gap-2"
                   >
                     <WhatsAppIcon className="w-4 h-4" />
-                    <span>Order via WhatsApp &middot; Request 4K QC ({formatPrice(currentVariant.price * quantity)})</span>
+                    <span>Liên Hệ Báo Giá &amp; Đặt Hàng Qua WhatsApp &middot; 4K QC</span>
                   </button>
 
                   <div className="flex items-center justify-between text-[11px]">
@@ -522,50 +553,40 @@ export default function ProductQuickViewModal() {
                     <button
                       type="button"
                       onClick={() => setShowQuickContact(!showQuickContact)}
-                      className="text-emerald-700 hover:text-emerald-900 font-semibold underline"
+                      className="text-emerald-700 hover:text-emerald-900 font-semibold underline cursor-pointer"
                     >
-                      {showQuickContact ? 'Hide delivery fields' : '+ Add shipping info for instant dispatch'}
+                      {showQuickContact ? 'Ẩn khung điều chỉnh tin nhắn' : '✎ Điều chỉnh nội dung tin gửi WhatsApp'}
                     </button>
                   </div>
 
-                  {/* Expandable Quick Contact Inputs */}
+                  {/* Expandable Quick Contact & Message Editor Inputs */}
                   {showQuickContact && (
-                    <div className="p-3 bg-neutral-50 border border-neutral-200 text-xs space-y-2 animate-in fade-in duration-200">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-0.5">Your Full Name</label>
-                        <input
-                          type="text"
-                          value={quickName}
-                          onChange={(e) => setQuickName(e.target.value)}
-                          placeholder="e.g. Alexander Wright"
-                          className="w-full p-2 border border-neutral-300 text-xs bg-white focus:outline-none focus:border-gold-500"
-                        />
+                    <div className="p-3 bg-neutral-50 border border-neutral-200 text-xs space-y-2.5 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-obsidian-950">
+                          Nội dung tin nhắn gửi WhatsApp (Có thể sửa trực tiếp):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsQuickMessageDirty(false);
+                            setCustomQuickMessage(generatedQuickWaMessage);
+                          }}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:underline"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Mặc định</span>
+                        </button>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-0.5">Phone / WhatsApp *</label>
-                          <input
-                            type="tel"
-                            value={quickPhone}
-                            onChange={(e) => setQuickPhone(e.target.value)}
-                            placeholder="+1 (555) 000-0000"
-                            className="w-full p-2 border border-neutral-300 text-xs bg-white focus:outline-none focus:border-gold-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-0.5">City / Country</label>
-                          <input
-                            type="text"
-                            value={quickAddress}
-                            onChange={(e) => setQuickAddress(e.target.value)}
-                            placeholder="e.g. New York, USA"
-                            className="w-full p-2 border border-neutral-300 text-xs bg-white focus:outline-none focus:border-gold-500"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-neutral-500 italic">
-                        ✓ Your shipping details will be pre-formatted into WhatsApp so Sale can prepare dispatch immediately.
-                      </p>
+                      <textarea
+                        rows={6}
+                        value={customQuickMessage}
+                        onChange={(e) => {
+                          setCustomQuickMessage(e.target.value);
+                          setIsQuickMessageDirty(true);
+                        }}
+                        className="w-full p-2 border border-neutral-300 text-[11px] font-mono bg-white focus:outline-none focus:border-emerald-700 leading-relaxed"
+                      />
                     </div>
                   )}
                 </div>
@@ -612,7 +633,7 @@ export default function ProductQuickViewModal() {
                   ) : (
                     <>
                       <ShoppingBag className="w-4 h-4 text-gold-400" />
-                      <span>Add To Cart &middot; {formatPrice(currentVariant.price * quantity)}</span>
+                      <span>Add To Cart &middot; Giá: Liên hệ</span>
                     </>
                   )}
                 </button>

@@ -17,6 +17,9 @@ import {
 import {
   getStoreWhatsAppNumber,
   setStoreWhatsAppNumber,
+  getWhatsAppTemplateConfig,
+  setWhatsAppTemplateConfig,
+  resetWhatsAppTemplateConfig,
   buildWhatsAppOrderMessage,
   buildWhatsAppQuickProductMessage,
   openWhatsAppChat,
@@ -349,7 +352,7 @@ export function StoreProvider({ children }) {
   // Shows published products; if 0 products are published yet (initial V4 state before Admin publishes first batch),
   // shows V4 export_ready products that have valid brand and auto_matched/confirmed price so Storefront is never blank.
   const storefrontProducts = useMemo(() => {
-    const nonLegacy = allProducts.filter((p) => !p.legacy && p.brand && p.variant1Price > 0);
+    const nonLegacy = allProducts.filter((p) => !p.legacy && p.brand);
     const explicitlyPublished = nonLegacy.filter((p) => p.publication_status === 'published');
     return explicitlyPublished.length > 0 ? explicitlyPublished : nonLegacy;
   }, [allProducts]);
@@ -793,10 +796,23 @@ export function StoreProvider({ children }) {
   };
 
   const [whatsappNumber, setWhatsappNumberState] = useState(() => getStoreWhatsAppNumber());
+  const [whatsappTemplateConfig, setWhatsappTemplateConfigState] = useState(() => getWhatsAppTemplateConfig());
 
   const updateWhatsappNumber = (newNumber) => {
     setStoreWhatsAppNumber(newNumber);
     setWhatsappNumberState(getStoreWhatsAppNumber());
+  };
+
+  const updateWhatsappTemplateConfig = (partialConfig) => {
+    const updated = setWhatsAppTemplateConfig(partialConfig);
+    setWhatsappTemplateConfigState(updated);
+    return updated;
+  };
+
+  const resetWhatsappTemplate = () => {
+    const defaults = resetWhatsAppTemplateConfig();
+    setWhatsappTemplateConfigState(defaults);
+    return defaults;
   };
 
   const getWhatsAppContactUrl = (customMessage = '') => {
@@ -804,76 +820,72 @@ export function StoreProvider({ children }) {
   };
 
   const sendOrderToWhatsApp = (orderData) => {
-    const message = buildWhatsAppOrderMessage({
-      orderId: orderData.orderId,
-      customer: orderData.customer,
-      items: orderData.items || cart,
-      totalFormatted: orderData.totalFormatted || formatPrice(orderData.totalUSD),
-      totalUSD: orderData.totalUSD,
-      notes: orderData.notes,
-      coupon: orderData.coupon || appliedCoupon,
-      shippingFee: orderData.shippingFee ?? (freeShippingUnlocked ? 0 : 35)
-    });
+    const customMsg = (orderData?.customMessage || '').trim();
+    const message =
+      customMsg ||
+      buildWhatsAppOrderMessage({
+        orderId: orderData.orderId,
+        customer: orderData.customer,
+        items: orderData.items || cart,
+        totalFormatted: orderData.totalFormatted || formatPrice(orderData.totalUSD),
+        totalUSD: orderData.totalUSD,
+        notes: orderData.notes,
+        coupon: orderData.coupon || appliedCoupon,
+        shippingFee: orderData.shippingFee ?? (freeShippingUnlocked ? 0 : 35),
+        templateConfig: whatsappTemplateConfig
+      });
     return openWhatsAppChat(message, whatsappNumber);
   };
 
-  const sendQuickProductToWhatsApp = (watchOrOptions, variantNameArg, variantPriceArg, quantityArg = 1) => {
+  const sendQuickProductToWhatsApp = (
+    watchOrOptions,
+    variantNameArg,
+    variantPriceArg,
+    quantityArg = 1,
+    customMessageArg = ''
+  ) => {
     let watch = null;
     let variantName = 'VS / Clean 1:1 Super Clone';
     let variantPrice = 1199;
     let quantity = 1;
     let customer = {};
     let notes = '';
+    let customMessage = '';
 
-    if (watchOrOptions && typeof watchOrOptions === 'object' && ('watch' in watchOrOptions || 'customer' in watchOrOptions)) {
+    if (
+      watchOrOptions &&
+      typeof watchOrOptions === 'object' &&
+      ('watch' in watchOrOptions || 'customer' in watchOrOptions || 'customMessage' in watchOrOptions)
+    ) {
       watch = watchOrOptions.watch;
       variantName = watchOrOptions.variantName || watch?.variant2Name || 'VS / Clean 1:1 Super Clone';
       variantPrice = Number(watchOrOptions.variantPrice || watch?.variant2Price || watch?.priceUSD || 1199);
       quantity = Number(watchOrOptions.quantity || 1);
       customer = watchOrOptions.customer || {};
       notes = watchOrOptions.notes || '';
+      customMessage = (watchOrOptions.customMessage || '').trim();
     } else {
       watch = watchOrOptions;
       variantName = variantNameArg || watch?.variant2Name || 'VS / Clean 1:1 Super Clone';
       variantPrice = Number(variantPriceArg || watch?.variant2Price || watch?.priceUSD || 1199);
       quantity = Number(quantityArg || 1);
+      customMessage = (customMessageArg || '').trim();
     }
 
-    if (!watch) return '';
+    if (!watch && !customMessage) return '';
 
-    const hasCustomerInfo = Boolean(customer?.fullName?.trim() && customer?.phone?.trim());
-    if (!hasCustomerInfo) {
-      setCart((prev) => {
-        const existing = prev.find(
-          (item) => item.product.id === watch.id && item.variantName === variantName
-        );
-        if (existing) {
-          return prev;
-        }
-        return [
-          ...prev,
-          {
-            product: watch,
-            variantName,
-            priceUSD: variantPrice,
-            quantity
-          }
-        ];
+    // 1-Click Direct Push: Immediately push watch details (or user-adjusted custom message) to Owner's WhatsApp
+    const message =
+      customMessage ||
+      buildWhatsAppQuickProductMessage({
+        watch,
+        variantName,
+        variantPrice,
+        quantity,
+        customer,
+        notes,
+        templateConfig: whatsappTemplateConfig
       });
-      setQuickViewProduct(null);
-      setIsCartOpen(false);
-      setIsCheckoutOpen(true);
-      return '';
-    }
-
-    const message = buildWhatsAppQuickProductMessage({
-      watch,
-      variantName,
-      variantPrice,
-      quantity,
-      customer,
-      notes
-    });
     return openWhatsAppChat(message, whatsappNumber);
   };
 
@@ -950,6 +962,9 @@ export function StoreProvider({ children }) {
         setSearchQuery,
         whatsappNumber,
         updateWhatsappNumber,
+        whatsappTemplateConfig,
+        updateWhatsappTemplateConfig,
+        resetWhatsappTemplate,
         getWhatsAppContactUrl,
         sendOrderToWhatsApp,
         sendQuickProductToWhatsApp

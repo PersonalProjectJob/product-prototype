@@ -52,26 +52,20 @@ CREATE TABLE IF NOT EXISTS public.products (
   updated_by          TEXT
 );
 
--- Ràng buộc BR-06/BR-07 ở tầng DB: không thể chuyển sang 'published' nếu thiếu điều kiện
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'products_publish_gate_chk'
-  ) THEN
-    ALTER TABLE public.products
-      ADD CONSTRAINT products_publish_gate_chk CHECK (
-        publication_status <> 'published'
-        OR (
-          legacy = FALSE
-          AND export_status = 'export_ready'
-          AND image_count >= 4
-          AND btrim(brand) <> ''
-          AND variant1_price IS NOT NULL AND variant1_price > 0
-          AND price_status IN ('auto_matched', 'confirmed')
-        )
-      );
-  END IF;
-END $$;
+-- Ràng buộc BR-06/BR-07 ở tầng DB: không thể chuyển sang 'published' nếu thiếu điều kiện (Chế độ Giá: Liên hệ — không bắt buộc variant1_price)
+ALTER TABLE public.products
+  DROP CONSTRAINT IF EXISTS products_publish_gate_chk;
+
+ALTER TABLE public.products
+  ADD CONSTRAINT products_publish_gate_chk CHECK (
+    publication_status <> 'published'
+    OR (
+      legacy = FALSE
+      AND export_status = 'export_ready'
+      AND image_count >= 4
+      AND btrim(brand) <> ''
+    )
+  );
 
 -- 2. Bảng product_images (6.870 dòng từ data/images.csv + asset_manifest.json)
 CREATE TABLE IF NOT EXISTS public.product_images (

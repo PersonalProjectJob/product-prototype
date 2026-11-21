@@ -170,14 +170,11 @@ export default function CartDrawer() {
                         </button>
                       </div>
 
-                      {/* Line Total */}
+                      {/* Line Total -> Contact for Price */}
                       <div className="text-right">
-                        <span className="font-mono font-bold text-sm text-obsidian-950">
-                          {formatPrice(itemUnitRate * quantity)}
+                        <span className="font-mono font-bold text-xs text-[#008A38]">
+                          Giá: Liên hệ
                         </span>
-                        <div className="text-[10px] font-mono text-obsidian-800/50">
-                          {formatPrice(itemUnitRate)} each
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -250,32 +247,21 @@ export default function CartDrawer() {
             {/* Calculations Breakdown */}
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-obsidian-800/70">
-                <span>Subtotal ({cartCount} items):</span>
-                <span className="font-mono font-medium">{formatPrice(cartSubtotalUSD)}</span>
+                <span>Số lượng ({cartCount} sản phẩm):</span>
+                <span className="font-mono font-bold text-[#008A38]">Giá: Liên hệ</span>
               </div>
 
-              {appliedCoupon && (
-                <div className="flex justify-between text-emerald-700 font-semibold">
-                  <span>VIP Discount ({appliedCoupon.discountPercent}%):</span>
-                  <span className="font-mono">-{formatPrice(discountAmountUSD)}</span>
-                </div>
-              )}
-
               <div className="flex justify-between text-obsidian-800/70">
-                <span>Estimated Priority Shipping:</span>
-                <span className="font-mono font-medium">
-                  {freeShippingUnlocked ? (
-                    <span className="text-emerald-700 font-bold">FREE (Save $50)</span>
-                  ) : (
-                    formatPrice(35)
-                  )}
+                <span>Vận chuyển (DHL Express Priority):</span>
+                <span className="font-mono font-medium text-emerald-700 font-bold">
+                  Miễn phí / Báo theo đơn
                 </span>
               </div>
 
               <div className="flex justify-between text-sm font-extrabold text-obsidian-950 pt-2 border-t border-obsidian-800/10">
-                <span>Estimated Total:</span>
-                <span className="font-mono text-base text-gold-600">
-                  {formatPrice(finalTotalUSD + (freeShippingUnlocked ? 0 : 35))}
+                <span>Báo giá tổng:</span>
+                <span className="font-mono text-sm text-[#008A38]">
+                  Liên hệ qua WhatsApp
                 </span>
               </div>
             </div>
