@@ -43,8 +43,8 @@ export default function FloatingCartButton() {
           <span className="text-[10px] uppercase tracking-wider text-white/70 font-semibold">
             Giỏ hàng ({cartCount})
           </span>
-          <span className="text-sm font-mono font-extrabold text-gold-400">
-            {formatPrice(cartSubtotalUSD)}
+          <span className="text-xs font-mono font-extrabold text-gold-400">
+            Giá: Liên hệ
           </span>
         </div>
       ) : (

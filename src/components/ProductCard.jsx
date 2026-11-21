@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Play } from 'lucide-react';
 import { useStore, getFigmaWatchThumbnail } from '../context/StoreContext';
+import WhatsAppIcon from './common/WhatsAppIcon';
 
 export default function ProductCard({ watch }) {
-  const { navigateToProduct, setQuickViewProduct } = useStore();
+  const { navigateToProduct, setQuickViewProduct, sendQuickProductToWhatsApp } = useStore();
   const [isHovered, setIsHovered] = useState(false);
 
   const figmaImg = typeof getFigmaWatchThumbnail === 'function'
@@ -18,8 +19,12 @@ export default function ProductCard({ watch }) {
     : [watch.primaryImage || figmaImg];
 
   const displayImg = isHovered && images[1] ? images[1] : (watch.primaryImage || images[0] || figmaImg);
-  const priceUSD = Number(watch.variant1Price || watch.priceUSD || 700);
   const hasVideo = Array.isArray(watch.videos) && watch.videos.length > 0;
+
+  const handleContactPriceClick = (e) => {
+    e.stopPropagation();
+    sendQuickProductToWhatsApp(watch, watch.variant2Name || 'VS / Clean 1:1 Super Clone');
+  };
 
   return (
     <div
@@ -78,9 +83,15 @@ export default function ProductCard({ watch }) {
             {watch.name}
           </h3>
 
-          <p className="text-[16px] leading-6 font-medium text-[#0D0D0D]">
-            $ {priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
+          <button
+            type="button"
+            onClick={handleContactPriceClick}
+            className="mt-0.5 inline-flex items-center gap-1.5 text-[14px] sm:text-[15px] leading-6 font-bold text-[#008A38] hover:text-[#00742f] transition-colors w-fit"
+            title="Bấm để gửi toàn bộ thông tin đồng hồ này qua WhatsApp và nhận báo giá"
+          >
+            <WhatsAppIcon className="w-4 h-4 text-[#25D366] flex-shrink-0" />
+            <span>Giá: Liên hệ</span>
+          </button>
         </div>
       </div>
     </div>

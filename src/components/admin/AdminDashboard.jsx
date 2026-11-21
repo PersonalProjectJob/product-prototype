@@ -3,8 +3,11 @@ import { useStore } from '../../context/StoreContext';
 import {
   WHATSAPP_CONTACT_NAME,
   DEFAULT_WHATSAPP_NUMBER,
+  DEFAULT_WHATSAPP_TEMPLATE_CONFIG,
+  WHATSAPP_TEMPLATE_VARIABLES,
   normalizeWhatsAppPhone,
   formatWhatsAppDisplayPhone,
+  buildWhatsAppQuickProductMessage,
   generateWhatsAppUrl
 } from '../../services/whatsappService';
 import WhatsAppIcon from '../common/WhatsAppIcon';
@@ -64,7 +67,10 @@ export default function AdminDashboard() {
     evaluatePublishGate,
     formatPrice,
     whatsappNumber,
-    updateWhatsappNumber
+    updateWhatsappNumber,
+    whatsappTemplateConfig,
+    updateWhatsappTemplateConfig,
+    resetWhatsappTemplate
   } = useStore();
 
   const catalogList = Array.isArray(adminProducts) && adminProducts.length > 0 ? adminProducts : products;
@@ -115,6 +121,10 @@ export default function AdminDashboard() {
   const [isWhatsappModalOpen, setIsWhatsappModalOpen] = useState(false);
   const [tempR2Url, setTempR2Url] = useState(r2PublicUrl || '');
   const [tempWhatsapp, setTempWhatsapp] = useState(whatsappNumber || DEFAULT_WHATSAPP_NUMBER);
+  const [tempTemplateCfg, setTempTemplateCfg] = useState(() => ({
+    ...DEFAULT_WHATSAPP_TEMPLATE_CONFIG,
+    ...(whatsappTemplateConfig || {})
+  }));
   const [editingProduct, setEditingProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -124,6 +134,13 @@ export default function AdminDashboard() {
   useEffect(() => {
     setTempWhatsapp(whatsappNumber || DEFAULT_WHATSAPP_NUMBER);
   }, [whatsappNumber]);
+
+  useEffect(() => {
+    setTempTemplateCfg({
+      ...DEFAULT_WHATSAPP_TEMPLATE_CONFIG,
+      ...(whatsappTemplateConfig || {})
+    });
+  }, [whatsappTemplateConfig]);
 
   useEffect(() => {
     setTempR2Url(r2PublicUrl || '');
@@ -429,15 +446,51 @@ export default function AdminDashboard() {
     }
   };
 
+  const samplePreviewWatch = useMemo(() => {
+    return (
+      catalogList.find((p) => p.product_id === 'P000028') ||
+      catalogList[0] || {
+        product_id: 'P000028',
+        brand: 'Rolex',
+        name: 'Rolex GMT-Master II Black dial',
+        nickname: 'Bruce Wayne',
+        collection: 'GMT-Master II',
+        modelCode: 'M126710GRNR',
+        factory: 'VSF Ultimate Edition',
+        dial_color: 'Black',
+        caseSize: '40 mm x 12.1 mm',
+        material: 'Solid 904L Oystersteel',
+        bracelet_or_strap: 'Jubilee Bracelet',
+        movement: 'Dandong DD3285 (72h Reserve)',
+        waterResistance: '50 Meters (Pressure Tested)',
+        primaryImage: 'https://pub-82e156ad04d14534bbbdde8d20f65e25.r2.dev/assets/P000028/P000028-front-006738.webp'
+      }
+    );
+  }, [catalogList]);
+
+  const adminPreviewWaMessage = useMemo(() => {
+    return buildWhatsAppQuickProductMessage({
+      watch: samplePreviewWatch,
+      variantName: 'VS / Clean 1:1 Super Clone',
+      quantity: 1,
+      templateConfig: tempTemplateCfg
+    });
+  }, [samplePreviewWatch, tempTemplateCfg]);
+
   const handleSaveWhatsappDirect = (e) => {
     if (e) e.preventDefault();
     const normalized = normalizeWhatsAppPhone(tempWhatsapp) || DEFAULT_WHATSAPP_NUMBER;
     if (updateWhatsappNumber) {
       updateWhatsappNumber(normalized);
     }
+    if (updateWhatsappTemplateConfig) {
+      updateWhatsappTemplateConfig(tempTemplateCfg);
+    }
     setTempWhatsapp(normalized);
     setIsWhatsappModalOpen(false);
-    showNotification(`Đã cập nhật SĐT WhatsApp chốt đơn: ${formatWhatsAppDisplayPhone(normalized)}`);
+    showNotification(
+      `Đã lưu SĐT (${formatWhatsAppDisplayPhone(normalized)}) & cấu hình mẫu tin nhắn gửi WhatsApp!`
+    );
   };
 
   const handleResetWhatsappDefault = () => {
@@ -446,6 +499,12 @@ export default function AdminDashboard() {
     }
     setTempWhatsapp(DEFAULT_WHATSAPP_NUMBER);
     showNotification(`Đã khôi phục SĐT mặc định: ${formatWhatsAppDisplayPhone(DEFAULT_WHATSAPP_NUMBER)}`);
+  };
+
+  const handleResetTemplateDefault = () => {
+    const defaults = resetWhatsappTemplate ? resetWhatsappTemplate() : { ...DEFAULT_WHATSAPP_TEMPLATE_CONFIG };
+    setTempTemplateCfg(defaults);
+    showNotification('Đã khôi phục mẫu tin nhắn WhatsApp về mặc định!');
   };
 
   const handleSaveCloudSettings = async (e) => {
@@ -718,32 +777,32 @@ export default function AdminDashboard() {
 
               <div className="bg-white border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm">
                 <div className="flex items-center justify-between text-xs text-emerald-800 uppercase font-bold">
-                  <span>Giá Tự Khớp / Duyệt</span>
+                  <span>Chế Độ Báo Giá</span>
                   <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-800 mt-1">
-                  {stats.autoMatched + stats.confirmedPrice}
+                <div className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-800 mt-1">
+                  Giá: Liên hệ
                 </div>
                 <div className="text-[11px] text-emerald-800 mt-1 font-mono font-medium">
-                  Tự khớp: {stats.autoMatched} &bull; Đã duyệt: {stats.confirmedPrice}
+                  1-Click đẩy thông tin qua WhatsApp
                 </div>
               </div>
 
               <div
                 onClick={() => {
                   setActiveAdminView('products');
-                  setSelectedPriceStatus('missing');
+                  setSelectedBrand('(Blank Brand)');
                   setShowLegacyOnly(false);
                 }}
                 className="bg-white hover:bg-amber-50 border border-obsidian-800/15 p-3.5 sm:p-4 shadow-sm cursor-pointer transition-colors"
-                title="Bấm để lọc các sản phẩm thiếu giá hoặc thiếu brand"
+                title="Bấm để lọc các sản phẩm thiếu brand"
               >
                 <div className="flex items-center justify-between text-xs text-amber-900 uppercase font-bold">
-                  <span>Cần Bổ Sung Giá/Brand</span>
+                  <span>Cần Bổ Sung Brand</span>
                   <AlertCircle className="w-4 h-4 text-amber-700" />
                 </div>
                 <div className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-900 mt-1">
-                  {stats.missingPrice}
+                  {stats.missingBrand}
                 </div>
                 <div className="text-[11px] text-amber-900 mt-1 font-mono font-medium">
                   Trống brand: {stats.missingBrand} &bull; Xuất bản: {stats.published}
@@ -1052,8 +1111,17 @@ export default function AdminDashboard() {
                   <span>Lưu SĐT</span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => setIsWhatsappModalOpen(true)}
+                  className="px-3 py-2 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Sửa Mẫu Tin Gửi</span>
+                </button>
+
                 <a
-                  href={generateWhatsAppUrl('Xin chào Thanh Phuong Luxury Watch, kiểm tra kết nối SĐT WhatsApp từ Admin!', previewCleanPhone)}
+                  href={generateWhatsAppUrl(adminPreviewWaMessage, previewCleanPhone)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-2 bg-white hover:bg-neutral-100 text-emerald-800 border border-emerald-700 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1 whitespace-nowrap"
@@ -1288,115 +1356,14 @@ export default function AdminDashboard() {
                               </span>
                             </td>
 
-                            {/* Price & Auto-Match Status */}
+                            {/* Price -> Contact for Price Mode ("Giá: Liên hệ") */}
                             <td className="py-3 px-3">
-                              <div className="flex items-center gap-2">
-                                {inlineEditing?.id === p.id && inlineEditing.field === 'variant1Price' ? (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-mono font-bold">$</span>
-                                    <input
-                                      type="number"
-                                      value={inlineEditing.value}
-                                      onChange={(e) => setInlineEditing({ ...inlineEditing, value: e.target.value })}
-                                      onBlur={() => handleSaveInline(p, 'variant1Price')}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          e.currentTarget.blur();
-                                        } else if (e.key === 'Escape') {
-                                          setInlineEditing(null);
-                                        }
-                                      }}
-                                      className="w-20 px-1 py-0.5 border border-gold-500 font-mono text-xs focus:outline-none"
-                                      autoFocus
-                                    />
-                                  </div>
-                                ) : (
-                                  <div
-                                    onClick={() =>
-                                      setInlineEditing({
-                                        id: p.id,
-                                        field: 'variant1Price',
-                                        value: p.variant1Price || 700
-                                      })
-                                    }
-                                    className="cursor-pointer group flex items-center gap-1 hover:text-gold-600"
-                                    title="Bấm để sửa giá Variant 1"
-                                  >
-                                    <span className="font-mono font-bold">
-                                      {p.variant1Price > 0 ? formatPrice(p.variant1Price) : '— Nhập giá'}
-                                    </span>
-                                    <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 text-obsidian-800/40" />
-                                  </div>
-                                )}
-
-                                <span className="text-obsidian-800 font-mono">/</span>
-
-                                {inlineEditing?.id === p.id && inlineEditing.field === 'variant2Price' ? (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-mono font-bold">$</span>
-                                    <input
-                                      type="number"
-                                      value={inlineEditing.value}
-                                      onChange={(e) => setInlineEditing({ ...inlineEditing, value: e.target.value })}
-                                      onBlur={() => handleSaveInline(p, 'variant2Price')}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          e.currentTarget.blur();
-                                        } else if (e.key === 'Escape') {
-                                          setInlineEditing(null);
-                                        }
-                                      }}
-                                      className="w-20 px-1 py-0.5 border border-gold-500 font-mono text-xs focus:outline-none"
-                                      autoFocus
-                                    />
-                                  </div>
-                                ) : (
-                                  <div
-                                    onClick={() =>
-                                      setInlineEditing({
-                                        id: p.id,
-                                        field: 'variant2Price',
-                                        value: p.variant2Price || 1199
-                                      })
-                                    }
-                                    className="cursor-pointer group flex items-center gap-1 hover:text-gold-600"
-                                    title="Bấm để sửa giá Variant 2"
-                                  >
-                                    <span className="font-mono text-obsidian-800/80">
-                                      {p.variant2Price > 0 ? formatPrice(p.variant2Price) : '—'}
-                                    </span>
-                                  </div>
-                                )}
+                              <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-700/30 text-emerald-800 font-bold text-xs">
+                                <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Giá: Liên hệ</span>
                               </div>
-
-                              <div className="flex items-center gap-1.5 mt-1">
-                                {p.price_status === 'confirmed' ? (
-                                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2">
-                                    ✔ Đã duyệt
-                                  </span>
-                                ) : p.price_status === 'auto_matched' ? (
-                                  <>
-                                    <span
-                                      className="text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.2"
-                                      title={p.match_notes || 'Tự khớp từ CMS cũ'}
-                                    >
-                                      Tự khớp {p.match_confidence ? `(${Math.round(p.match_confidence * 100)}%)` : ''}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleApprovePrice(p)}
-                                      className="text-[10px] font-bold text-emerald-700 hover:underline"
-                                    >
-                                      [Duyệt]
-                                    </button>
-                                  </>
-                                ) : (
-                                  <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0.2">
-                                    Chưa có giá
-                                  </span>
-                                )}
+                              <div className="text-[10px] text-obsidian-800 font-mono mt-1">
+                                1-Click đẩy thông số qua WhatsApp
                               </div>
                             </td>
 
@@ -1529,92 +1496,306 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* ===================== DEDICATED WHATSAPP PHONE SETUP MODAL ===================== */}
+      {/* ===================== DEDICATED WHATSAPP PHONE & MESSAGE TEMPLATE SETUP MODAL ===================== */}
       {isWhatsappModalOpen && (
-        <div className="fixed inset-0 z-60 bg-obsidian-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white max-w-lg w-full border border-obsidian-800/20 shadow-2xl p-4 sm:p-7 space-y-4 sm:space-y-5 animate-in zoom-in-95 overflow-hidden">
+        <div className="fixed inset-0 z-60 bg-obsidian-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white max-w-4xl w-full border border-obsidian-800/20 shadow-2xl p-4 sm:p-7 space-y-4 sm:space-y-5 animate-in zoom-in-95 max-h-[92vh] overflow-y-auto my-auto">
             <div className="flex items-start justify-between gap-2 border-b pb-3 border-obsidian-800/10">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded bg-[#25D366] text-white flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded bg-emerald-700 text-white flex items-center justify-center flex-shrink-0">
                   <WhatsAppIcon className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-xs sm:text-sm uppercase tracking-wider text-obsidian-950 leading-snug">
-                    Cài Đặt Số Điện Thoại WhatsApp Chốt Đơn
+                    Cài Đặt Số Điện Thoại &amp; Điều Chỉnh Mẫu Tin Nhắn Gửi WhatsApp
                   </h3>
-                  <p className="text-[11px] text-obsidian-800/60 truncate">{WHATSAPP_CONTACT_NAME}</p>
+                  <p className="text-[11px] text-obsidian-800 truncate">
+                    {WHATSAPP_CONTACT_NAME} &bull; Cho phép bật/tắt thông số hoặc tự soạn mẫu tin nhắn theo biến động
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsWhatsappModalOpen(false)}
-                className="p-1 text-obsidian-800/60 hover:text-obsidian-950 flex-shrink-0"
+                className="p-1 text-obsidian-800 hover:text-obsidian-950 flex-shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveWhatsappDirect} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-950 mb-1.5">
-                  Số Điện Thoại WhatsApp Nhận Đơn Hàng:
-                </label>
+            <form onSubmit={handleSaveWhatsappDirect} className="space-y-5">
+              {/* Section 1: Phone Number */}
+              <div className="p-3.5 bg-neutral-50 border border-obsidian-800/15 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-obsidian-950">
+                    1. Số Điện Thoại WhatsApp Nhận Đơn Hàng:
+                  </label>
+                  <span className="font-mono text-xs font-bold text-emerald-800">
+                    Đang hiển thị: {previewFormattedPhone} (wa.me/{previewCleanPhone})
+                  </span>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={tempWhatsapp}
                     onChange={(e) => setTempWhatsapp(e.target.value)}
                     placeholder="VD: 0977889986 hoặc +84 97 788 99 86"
-                    className="w-full sm:flex-1 p-2.5 text-sm font-mono font-bold border border-obsidian-800/20 focus:border-[#008A38] focus:outline-none min-w-0"
-                    autoFocus
+                    className="w-full sm:flex-1 p-2.5 text-sm font-mono font-bold bg-white border border-obsidian-800/30 focus:border-emerald-700 focus:outline-none min-w-0 text-obsidian-950"
                   />
                   <button
                     type="button"
                     onClick={() => setTempWhatsapp(DEFAULT_WHATSAPP_NUMBER)}
-                    className="px-3 py-2 text-xs font-semibold border border-obsidian-800/20 hover:bg-neutral-100 text-obsidian-800 whitespace-nowrap flex-shrink-0"
+                    className="px-3 py-2 text-xs font-semibold bg-white border border-obsidian-800/30 hover:bg-neutral-100 text-obsidian-900 whitespace-nowrap flex-shrink-0"
                   >
-                    Khôi phục số mặc định
+                    Khôi phục SĐT mặc định
                   </button>
                 </div>
               </div>
 
-              <div className="bg-emerald-50/60 border border-[#25D366]/40 p-3 sm:p-3.5 text-xs space-y-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-obsidian-800/70">Hiển thị trên web &amp; Checkout:</span>
-                  <span className="font-mono font-bold text-[#008A38] whitespace-nowrap">{previewFormattedPhone}</span>
+              {/* Section 2: Message Template Mode & Field Toggles */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <div className="lg:col-span-7 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 border-obsidian-800/10">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-obsidian-950">
+                      2. Điều Chỉnh Nội Dung Tin Nhắn Gửi WhatsApp:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleResetTemplateDefault}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 hover:underline cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Khôi phục mẫu mặc định</span>
+                    </button>
+                  </div>
+
+                  {/* Mode Switch: Structured vs Full Raw Template */}
+                  <div className="flex items-center gap-2 bg-neutral-100 p-1.5 border border-obsidian-800/15 text-xs">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTempTemplateCfg((prev) => ({ ...prev, useCustomRawTemplate: false }))
+                      }
+                      className={`flex-1 py-1.5 px-2 font-bold transition-colors cursor-pointer ${
+                        !tempTemplateCfg.useCustomRawTemplate
+                          ? 'bg-obsidian-950 text-white shadow-xs'
+                          : 'text-obsidian-800 hover:text-obsidian-950'
+                      }`}
+                    >
+                      Chế độ Bật/Tắt Trường &amp; Sửa Nhanh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTempTemplateCfg((prev) => ({ ...prev, useCustomRawTemplate: true }))
+                      }
+                      className={`flex-1 py-1.5 px-2 font-bold transition-colors cursor-pointer ${
+                        tempTemplateCfg.useCustomRawTemplate
+                          ? 'bg-obsidian-950 text-white shadow-xs'
+                          : 'text-obsidian-800 hover:text-obsidian-950'
+                      }`}
+                    >
+                      Chế độ Tự Soạn Mẫu Tự Do (Raw Template)
+                    </button>
+                  </div>
+
+                  {!tempTemplateCfg.useCustomRawTemplate ? (
+                    <div className="space-y-3 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-bold text-obsidian-950 mb-1">
+                            Tiêu đề đầu tin nhắn:
+                          </label>
+                          <input
+                            type="text"
+                            value={tempTemplateCfg.headerTitle || ''}
+                            onChange={(e) =>
+                              setTempTemplateCfg((prev) => ({ ...prev, headerTitle: e.target.value }))
+                            }
+                            className="w-full p-2 text-xs border border-obsidian-800/30 bg-white text-obsidian-950 focus:outline-none focus:border-emerald-700"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-obsidian-950 mb-1">
+                            Nhãn dòng Giá (Price):
+                          </label>
+                          <input
+                            type="text"
+                            value={tempTemplateCfg.priceLabel || ''}
+                            onChange={(e) =>
+                              setTempTemplateCfg((prev) => ({ ...prev, priceLabel: e.target.value }))
+                            }
+                            className="w-full p-2 text-xs border border-obsidian-800/30 bg-white text-obsidian-950 focus:outline-none focus:border-emerald-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-obsidian-950 mb-1.5">
+                          Chọn các thông số đồng hồ muốn đẩy qua WhatsApp:
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-neutral-50 border border-obsidian-800/15">
+                          {[
+                            { key: 'includeTimestamp', label: 'Thời gian gửi' },
+                            { key: 'includeProductId', label: 'Mã Product ID' },
+                            { key: 'includeNickname', label: 'Nickname' },
+                            { key: 'includeCollection', label: 'Bộ sưu tập / Dòng' },
+                            { key: 'includeRef', label: 'Mã Ref / SPU' },
+                            { key: 'includeFactory', label: 'Nhà máy (Factory)' },
+                            { key: 'includeVariant', label: 'Phiên bản máy' },
+                            { key: 'includeDial', label: 'Màu mặt số (Dial)' },
+                            { key: 'includeCaseSize', label: 'Kích thước vỏ' },
+                            { key: 'includeCaseMaterial', label: 'Chất liệu vỏ' },
+                            { key: 'includeBracelet', label: 'Dây đeo' },
+                            { key: 'includeMovement', label: 'Bộ máy (Calibre)' },
+                            { key: 'includeWaterResistance', label: 'Chống nước' },
+                            { key: 'includeImageUrl', label: 'Link ảnh R2 CDN' },
+                            { key: 'includeProductUrl', label: 'Link sản phẩm' },
+                            { key: 'includeServicesBlock', label: 'Khối Dịch vụ' }
+                          ].map((item) => (
+                            <label
+                              key={item.key}
+                              className="flex items-center gap-1.5 text-[11px] font-semibold text-obsidian-900 cursor-pointer select-none"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(tempTemplateCfg[item.key])}
+                                onChange={(e) =>
+                                  setTempTemplateCfg((prev) => ({
+                                    ...prev,
+                                    [item.key]: e.target.checked
+                                  }))
+                                }
+                              />
+                              <span>{item.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {tempTemplateCfg.includeServicesBlock && (
+                        <div>
+                          <label className="block font-bold text-obsidian-950 mb-1">
+                            Nội dung khối Dịch vụ yêu cầu:
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={tempTemplateCfg.servicesText || ''}
+                            onChange={(e) =>
+                              setTempTemplateCfg((prev) => ({ ...prev, servicesText: e.target.value }))
+                            }
+                            className="w-full p-2 text-[11px] font-mono border border-obsidian-800/30 bg-white text-obsidian-950 focus:outline-none focus:border-emerald-700"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block font-bold text-obsidian-950 mb-1">
+                          Câu chào cuối tin nhắn (Hỗ trợ biến <code className="font-mono">{'{{product_id}}'}</code>, <code className="font-mono">{'{{brand}}'}</code>, <code className="font-mono">{'{{title}}'}</code>, <code className="font-mono">{'{{variant}}'}</code>):
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={tempTemplateCfg.closingMessageTemplate || ''}
+                          onChange={(e) =>
+                            setTempTemplateCfg((prev) => ({
+                              ...prev,
+                              closingMessageTemplate: e.target.value
+                            }))
+                          }
+                          className="w-full p-2 text-[11px] font-mono border border-obsidian-800/30 bg-white text-obsidian-950 focus:outline-none focus:border-emerald-700"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 text-xs">
+                      <div>
+                        <span className="block font-bold text-obsidian-950 mb-1">
+                          Bấm vào biến bên dưới để chèn nhanh vào mẫu tin nhắn:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {WHATSAPP_TEMPLATE_VARIABLES.map((v) => (
+                            <button
+                              key={v.token}
+                              type="button"
+                              onClick={() =>
+                                setTempTemplateCfg((prev) => ({
+                                  ...prev,
+                                  customRawTemplate: `${prev.customRawTemplate || ''}\n${v.token}`
+                                }))
+                              }
+                              title={v.label}
+                              className="px-2 py-1 bg-neutral-100 hover:bg-emerald-50 text-obsidian-950 hover:text-emerald-800 border border-obsidian-800/20 font-mono text-[10px] font-bold transition-colors cursor-pointer"
+                            >
+                              + {v.token}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-obsidian-950 mb-1">
+                          Nội dung mẫu tin nhắn tự do (Raw Template):
+                        </label>
+                        <textarea
+                          rows={11}
+                          value={tempTemplateCfg.customRawTemplate || ''}
+                          onChange={(e) =>
+                            setTempTemplateCfg((prev) => ({
+                              ...prev,
+                              customRawTemplate: e.target.value
+                            }))
+                          }
+                          className="w-full p-2.5 text-[11px] font-mono border border-obsidian-800/30 bg-white text-obsidian-950 focus:outline-none focus:border-emerald-700 leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                  <span className="text-obsidian-800/70 flex-shrink-0">Liên kết đẩy đơn trực tiếp:</span>
-                  <code className="font-mono text-[11px] bg-white px-2 py-1 border border-emerald-200 text-obsidian-950 truncate block max-w-full">
-                    https://wa.me/{previewCleanPhone}?text=...
-                  </code>
+
+                {/* Live Preview Column */}
+                <div className="lg:col-span-5 flex flex-col justify-between bg-neutral-50 border border-obsidian-800/15 p-3.5 space-y-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-extrabold uppercase tracking-wider text-obsidian-950">
+                      <span>Bản Xem Trước Tin Nhắn (Live Preview)</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-800 text-white rounded">
+                        {samplePreviewWatch.product_id || 'P000028'}
+                      </span>
+                    </div>
+                    <pre className="p-3 bg-white border border-obsidian-800/20 text-[11px] font-mono text-obsidian-950 whitespace-pre-wrap break-words max-h-80 overflow-y-auto leading-relaxed">
+                      {adminPreviewWaMessage}
+                    </pre>
+                  </div>
+
+                  <p className="text-[11px] text-obsidian-800 leading-relaxed">
+                    ⓘ Ngoài mẫu chuẩn tại đây, trên trang chi tiết đồng hồ và trang giỏ hàng khách hàng cũng có khung <strong>&ldquo;Điều chỉnh nội dung tin gửi WhatsApp&rdquo;</strong> để sửa trực tiếp hoặc thêm ghi chú trước khi bấm gửi.
+                  </p>
                 </div>
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-obsidian-800/10">
                 <a
-                  href={generateWhatsAppUrl('Xin chào Thanh Phuong Luxury Watch, kiểm tra kết nối SĐT WhatsApp!', previewCleanPhone)}
+                  href={generateWhatsAppUrl(adminPreviewWaMessage, previewCleanPhone)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-[#008A38] hover:underline whitespace-nowrap py-1"
+                  className="inline-flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-emerald-800 hover:underline whitespace-nowrap py-1"
                 >
                   <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>Test mở WhatsApp ({previewFormattedPhone})</span>
+                  <span>Gửi thử mẫu tin nhắn này qua WhatsApp ({previewFormattedPhone})</span>
                 </a>
 
                 <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => setIsWhatsappModalOpen(false)}
-                    className="px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-obsidian-800/70 hover:text-obsidian-950 border border-obsidian-800/15 sm:border-0 whitespace-nowrap"
+                    className="px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-obsidian-800 hover:text-obsidian-950 border border-obsidian-800/20 sm:border-0 whitespace-nowrap"
                   >
                     Đóng
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2.5 bg-[#008A38] hover:bg-[#00742f] text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer whitespace-nowrap"
+                    className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer whitespace-nowrap"
                   >
-                    Lưu Số Điện Thoại
+                    Lưu Số Điện Thoại &amp; Mẫu Tin Nhắn
                   </button>
                 </div>
               </div>
