@@ -291,47 +291,31 @@ export default function OnePageCheckout() {
                   </div>
                 </div>
 
-                {/* Formatted WhatsApp Message Box (Editable) */}
+                {/* Formatted WhatsApp Message Box */}
                 <div className="flex-1 flex flex-col border border-obsidian-800/15 rounded-xl overflow-hidden bg-white">
                   <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
-                    <span className="font-semibold truncate min-w-0">Nội dung đơn hàng WhatsApp (Có thể chỉnh sửa):</span>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={handleResetOrderMessage}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[10px] font-semibold transition-colors whitespace-nowrap"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Mặc định</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyMessage(activeOrderMessageToSend)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
-                      >
-                        {copiedMessage ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                            <span className="text-emerald-300">Đã sao chép</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 flex-shrink-0" />
-                            <span>Sao chép tin nhắn</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                    <span className="font-semibold truncate min-w-0">Nội dung đơn hàng WhatsApp:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyMessage(liveOrderPreviewMessage)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
+                    >
+                      {copiedMessage ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                          <span className="text-emerald-300">Đã sao chép</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 flex-shrink-0" />
+                          <span>Sao chép tin nhắn</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <textarea
-                    rows={6}
-                    value={customOrderMessage}
-                    onChange={(e) => {
-                      setCustomOrderMessage(e.target.value);
-                      setIsOrderMessageDirty(true);
-                    }}
-                    className="p-3 text-[11px] font-mono text-obsidian-900 bg-neutral-50 leading-relaxed focus:outline-none focus:bg-white w-full"
-                  />
+                  <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap break-words max-h-40 overflow-y-auto overflow-x-hidden bg-neutral-50 leading-relaxed">
+                    {liveOrderPreviewMessage}
+                  </pre>
                 </div>
               </div>
             </div>
@@ -349,8 +333,7 @@ export default function OnePageCheckout() {
                     totalFormatted: formatPrice(orderCompletedData.totalUSD),
                     coupon: appliedCoupon,
                     shippingFee: shippingFeeUSD,
-                    notes: orderCompletedData.customer.notes,
-                    customMessage: activeOrderMessageToSend
+                    notes: orderCompletedData.customer.notes
                   });
                 }}
                 className="w-full px-4 py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide sm:tracking-wider flex items-center justify-center gap-2 shadow-md transition-all whitespace-nowrap"
@@ -562,55 +545,37 @@ export default function OnePageCheckout() {
                     </div>
                   </div>
 
-                  {/* Live Editable Preview of Customer + Order Info to be pushed to WhatsApp */}
+                  {/* Live Preview of Customer + Order Info to be pushed to WhatsApp */}
                   <div className="border border-emerald-200 bg-white overflow-hidden">
                     <div className="bg-obsidian-950 text-white px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
                       <span className="font-semibold flex items-center gap-1.5 min-w-0">
                         <WhatsAppIcon className="w-3.5 h-3.5 text-[#25D366] flex-shrink-0" />
                         <span className="truncate">
-                          <span className="sm:hidden">Sửa tin nhắn gửi:</span>
-                          <span className="hidden sm:inline">Nội dung tin nhắn gửi WhatsApp (Có thể chỉnh sửa trực tiếp):</span>
+                          <span className="sm:hidden">Xem trước tin nhắn:</span>
+                          <span className="hidden sm:inline">Bản xem trước tin nhắn đơn hàng gửi qua WhatsApp:</span>
                         </span>
                       </span>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={handleResetOrderMessage}
-                          className="inline-flex items-center gap-1 px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[10px] font-semibold transition-colors whitespace-nowrap"
-                          title="Khôi phục nội dung mặc định"
-                        >
-                          <RotateCcw className="w-3 h-3 flex-shrink-0" />
-                          <span>Mặc định</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyMessage(activeOrderMessageToSend)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
-                        >
-                          {copiedMessage ? (
-                            <>
-                              <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                              <span className="text-emerald-300">Đã copy!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3 flex-shrink-0" />
-                              <span>Copy nội dung</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(liveOrderPreviewMessage)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/15 hover:bg-white/25 rounded text-[10px] font-bold transition-colors whitespace-nowrap flex-shrink-0"
+                      >
+                        {copiedMessage ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                            <span className="text-emerald-300">Đã copy!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 flex-shrink-0" />
+                            <span>Copy nội dung</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <textarea
-                      rows={6}
-                      aria-label="Nội dung tin nhắn đơn hàng gửi qua WhatsApp"
-                      value={customOrderMessage}
-                      onChange={(e) => {
-                        setCustomOrderMessage(e.target.value);
-                        setIsOrderMessageDirty(true);
-                      }}
-                      className="w-full p-3 text-[11px] font-mono text-obsidian-900 bg-neutral-50/80 focus:bg-white focus:outline-none leading-relaxed"
-                    />
+                    <pre className="p-3 text-[11px] font-mono text-obsidian-900 whitespace-pre-wrap break-words max-h-36 overflow-y-auto overflow-x-hidden bg-neutral-50/80 leading-relaxed">
+                      {liveOrderPreviewMessage}
+                    </pre>
                   </div>
                 </div>
               </div>

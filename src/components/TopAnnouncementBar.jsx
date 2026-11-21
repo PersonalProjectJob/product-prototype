@@ -1,10 +1,10 @@
 import React from 'react';
-import { ShieldAlert, Globe, ChevronDown, CheckCircle2, Lock } from 'lucide-react';
+import { ShieldAlert, Globe, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { CURRENCY_RATES } from '../data/watches';
 
 export default function TopAnnouncementBar() {
-  const { currency, setCurrency, setIsAntiScamOpen, setIsTrackingOpen, setIsAdminOpen } = useStore();
+  const { currency, setCurrency, setIsAntiScamOpen, setIsTrackingOpen } = useStore();
 
   return (
     <div className="bg-obsidian-950 text-white text-xs border-b border-white/10 px-3 sm:px-4 py-2 transition-all overflow-hidden">
@@ -28,21 +28,6 @@ export default function TopAnnouncementBar() {
 
         {/* Right: Currency switcher & Quick Links */}
         <div className="w-full md:w-auto flex items-center justify-center md:justify-end gap-2.5 sm:gap-4 text-white/75 text-[11px] sm:text-xs flex-nowrap">
-          {import.meta.env.VITE_PROTOTYPE_MODE !== 'true' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setIsAdminOpen(true)}
-                className="hover:text-gold-400 transition-colors inline-flex items-center gap-1 font-mono text-[11px] whitespace-nowrap flex-shrink-0"
-                title="Open Admin CMS Dashboard & Google Sheets Manager"
-              >
-                <Lock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-gold-400 flex-shrink-0" />
-                <span>Admin CMS</span>
-              </button>
-              <div className="h-3 w-[1px] bg-white/20 flex-shrink-0" />
-            </>
-          )}
-
           <button
             type="button"
             onClick={() => setIsTrackingOpen(true)}
