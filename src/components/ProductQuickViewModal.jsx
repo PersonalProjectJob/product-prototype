@@ -1,8 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { getWatchShowcase } from '../utils/watchShowcase';
-import { buildWhatsAppQuickProductMessage } from '../services/whatsappService';
-import { X, Check, ShoppingBag, ShieldCheck, Star, Truck, Award, Sparkles, CheckCircle2, ExternalLink, RotateCcw } from 'lucide-react';
+import { X, Check, ShoppingBag, ShieldCheck, Star, Truck, Award, Sparkles, CheckCircle2, ExternalLink } from 'lucide-react';
 import WhatsAppIcon from './common/WhatsAppIcon';
 
 export default function ProductQuickViewModal() {
@@ -21,36 +20,6 @@ export default function ProductQuickViewModal() {
   const [quantity, setQuantity] = useState(1);
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('description'); // 'description' | 'specs'
-  const [showQuickContact, setShowQuickContact] = useState(false);
-  const [quickName, setQuickName] = useState('');
-  const [quickPhone, setQuickPhone] = useState('');
-  const [quickAddress, setQuickAddress] = useState('');
-  const [customQuickMessage, setCustomQuickMessage] = useState('');
-  const [isQuickMessageDirty, setIsQuickMessageDirty] = useState(false);
-
-  const generatedQuickWaMessage = useMemo(() => {
-    if (!quickViewProduct) return '';
-    const vName =
-      variantIndex === 0
-        ? quickViewProduct.variant1Name || 'Swiss Movement'
-        : quickViewProduct.variant2Name || 'VS / Clean 1:1 Super Clone';
-    return buildWhatsAppQuickProductMessage({
-      watch: quickViewProduct,
-      variantName: vName,
-      quantity,
-      customer: {
-        fullName: quickName.trim(),
-        phone: quickPhone.trim(),
-        address: quickAddress.trim()
-      }
-    });
-  }, [quickViewProduct, variantIndex, quantity, quickName, quickPhone, quickAddress]);
-
-  useEffect(() => {
-    if (!isQuickMessageDirty) {
-      setCustomQuickMessage(generatedQuickWaMessage);
-    }
-  }, [generatedQuickWaMessage, isQuickMessageDirty]);
 
   if (!quickViewProduct) return null;
 
@@ -108,13 +77,7 @@ export default function ProductQuickViewModal() {
       watch,
       variantName: currentVariant.name,
       variantPrice: currentVariant.price,
-      quantity,
-      customer: {
-        fullName: quickName.trim(),
-        phone: quickPhone.trim(),
-        address: quickAddress.trim()
-      },
-      customMessage: (customQuickMessage || generatedQuickWaMessage).trim()
+      quantity
     });
   };
 
@@ -542,53 +505,11 @@ export default function ProductQuickViewModal() {
                   <button
                     type="button"
                     onClick={handleOrderViaWhatsApp}
-                    className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-extrabold uppercase tracking-widest shadow-md transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-extrabold uppercase tracking-widest shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <WhatsAppIcon className="w-4 h-4" />
                     <span>Liên Hệ Báo Giá &amp; Đặt Hàng Qua WhatsApp &middot; 4K QC</span>
                   </button>
-
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-obsidian-800/60">Direct 1-on-1 VIP concierge support</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickContact(!showQuickContact)}
-                      className="text-emerald-700 hover:text-emerald-900 font-semibold underline cursor-pointer"
-                    >
-                      {showQuickContact ? 'Ẩn khung điều chỉnh tin nhắn' : '✎ Điều chỉnh nội dung tin gửi WhatsApp'}
-                    </button>
-                  </div>
-
-                  {/* Expandable Quick Contact & Message Editor Inputs */}
-                  {showQuickContact && (
-                    <div className="p-3 bg-neutral-50 border border-neutral-200 text-xs space-y-2.5 animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-obsidian-950">
-                          Nội dung tin nhắn gửi WhatsApp (Có thể sửa trực tiếp):
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsQuickMessageDirty(false);
-                            setCustomQuickMessage(generatedQuickWaMessage);
-                          }}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:underline"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          <span>Mặc định</span>
-                        </button>
-                      </div>
-                      <textarea
-                        rows={6}
-                        value={customQuickMessage}
-                        onChange={(e) => {
-                          setCustomQuickMessage(e.target.value);
-                          setIsQuickMessageDirty(true);
-                        }}
-                        className="w-full p-2 border border-neutral-300 text-[11px] font-mono bg-white focus:outline-none focus:border-emerald-700 leading-relaxed"
-                      />
-                    </div>
-                  )}
                 </div>
               )}
 

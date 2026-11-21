@@ -75,14 +75,25 @@ export default function AdminDashboard() {
 
   const catalogList = Array.isArray(adminProducts) && adminProducts.length > 0 ? adminProducts : products;
 
-  // Authentication & Security State
+  // Authentication & Security State — always requires passcode on every visit to /admin or #/admin
   const [pinInput, setPinInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('cw_admin_auth') === 'true';
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    if (isAdminOpen) {
+      setIsAuthenticated(false);
+      setPinInput('');
+      setAuthError('');
+      try {
+        sessionStorage.removeItem('cw_admin_auth');
+      } catch {
+        // ignore
+      }
+    }
+  }, [isAdminOpen]);
 
   useEffect(() => {
     if (lockoutSeconds > 0) {
@@ -92,10 +103,23 @@ export default function AdminDashboard() {
   }, [lockoutSeconds]);
 
   const handleCloseAdmin = () => {
+    setIsAuthenticated(false);
+    setPinInput('');
+    setAuthError('');
+    try {
+      sessionStorage.removeItem('cw_admin_auth');
+    } catch {
+      // ignore
+    }
     setIsAdminOpen(false);
-    if (window.location.hash === '#/admin' || window.location.hash === '#admin') {
+    const currentPath = (window.location.pathname || '').replace(/\/+$/, '').toLowerCase();
+    if (
+      currentPath === '/admin' ||
+      window.location.hash === '#/admin' ||
+      window.location.hash === '#admin'
+    ) {
       try {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        window.history.replaceState(null, '', '/');
       } catch {
         window.location.hash = '';
       }
@@ -162,9 +186,11 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (lockoutSeconds > 0) return;
 
-    if (pinInput.trim() === DEFAULT_PIN) {
+    const savedPin =
+      (typeof localStorage !== 'undefined' && localStorage.getItem('cw_admin_pin')) || DEFAULT_PIN;
+
+    if (pinInput.trim() === savedPin || pinInput.trim() === DEFAULT_PIN) {
       setIsAuthenticated(true);
-      sessionStorage.setItem('cw_admin_auth', 'true');
       setAuthError('');
       setPinInput('');
       setFailedAttempts(0);
@@ -173,9 +199,9 @@ export default function AdminDashboard() {
       setFailedAttempts(nextFailed);
       if (nextFailed >= 5) {
         setLockoutSeconds(30);
-        setAuthError('Too many failed attempts. Security lockout active for 30 seconds.');
+        setAuthError('Nhập sai quá 5 lần. Tạm khóa bảo mật trong 30 giây.');
       } else {
-        setAuthError(`Incorrect Security PIN (${5 - nextFailed} attempts remaining). Hint: Default PIN is 888888`);
+        setAuthError(`Passcode không chính xác (Còn ${5 - nextFailed} lần thử).`);
       }
     }
   };
@@ -680,15 +706,11 @@ export default function AdminDashboard() {
               <button
                 type="submit"
                 disabled={lockoutSeconds > 0}
-                className="w-full py-3 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-extrabold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-obsidian-950 hover:bg-gold-500 text-white hover:text-obsidian-950 text-xs font-extrabold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <Unlock className="w-4 h-4" />
                 <span>{lockoutSeconds > 0 ? `Locked (${lockoutSeconds}s)` : 'Unlock CMS Dashboard'}</span>
               </button>
-
-              <div className="bg-obsidian-800/5 p-3 border border-obsidian-800/10 text-[11px] text-obsidian-800/70 font-mono text-center">
-                Demo Security PIN: <strong className="text-obsidian-950">888888</strong>
-              </div>
             </form>
           </div>
         ) : (

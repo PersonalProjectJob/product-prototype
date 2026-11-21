@@ -286,19 +286,6 @@ export default function Navbar() {
               Contact
             </button>
 
-            {import.meta.env.VITE_PROTOTYPE_MODE !== 'true' && (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setIsAdminOpen(true);
-                }}
-                className="w-full text-left px-3 py-2 text-sm font-semibold text-gold-700 hover:bg-gold-50 rounded flex items-center gap-2"
-              >
-                <Lock className="w-4 h-4 text-gold-600" />
-                <span>Admin CMS Dashboard</span>
-              </button>
-            )}
-
             <div className="pt-2">
               <a
                 href={getWhatsAppContactUrl ? getWhatsAppContactUrl('Xin chào Thanh Phuong Luxury Watch, tôi cần tư vấn đồng hồ!') : 'https://wa.me/84977889986'}

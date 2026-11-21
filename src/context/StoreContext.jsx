@@ -372,19 +372,33 @@ export function StoreProvider({ children }) {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [isAntiScamOpen, setIsAntiScamOpen] = useState(false);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const isDirectAdminUrl = () => {
+    if (typeof window === 'undefined') return false;
+    const path = (window.location.pathname || '').replace(/\/+$/, '').toLowerCase();
+    const hash = (window.location.hash || '').replace(/\/+$/, '').toLowerCase();
+    return path === '/admin' || hash === '#/admin' || hash === '#admin';
+  };
 
-  // Hash routing for #/admin
+  const [isAdminOpen, setIsAdminOpen] = useState(() => {
+    if (import.meta.env.VITE_PROTOTYPE_MODE === 'true') return false;
+    return isDirectAdminUrl();
+  });
+
+  // Direct link routing for /admin and #/admin
   useEffect(() => {
     if (import.meta.env.VITE_PROTOTYPE_MODE === 'true') return;
-    const checkHash = () => {
-      if (window.location.hash === '#/admin' || window.location.hash === '#admin') {
+    const checkAdminUrl = () => {
+      if (isDirectAdminUrl()) {
         setIsAdminOpen(true);
       }
     };
-    checkHash();
-    window.addEventListener('hashchange', checkHash);
-    return () => window.removeEventListener('hashchange', checkHash);
+    checkAdminUrl();
+    window.addEventListener('hashchange', checkAdminUrl);
+    window.addEventListener('popstate', checkAdminUrl);
+    return () => {
+      window.removeEventListener('hashchange', checkAdminUrl);
+      window.removeEventListener('popstate', checkAdminUrl);
+    };
   }, []);
 
   const parseCurrentUrl = () => {
