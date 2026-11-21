@@ -6,7 +6,11 @@
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || 'https://nuhgccxcwlrsbbcxpskn.supabase.co').replace(/\/$/, '');
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const DEFAULT_R2_PUBLIC_URL = (import.meta.env.VITE_R2_PUBLIC_URL || '').replace(/\/$/, '');
+const DEFAULT_R2_PUBLIC_URL = (
+  import.meta.env.VITE_R2_PUBLIC_URL && !/\.r2\.cloudflarestorage\.com/i.test(import.meta.env.VITE_R2_PUBLIC_URL)
+    ? import.meta.env.VITE_R2_PUBLIC_URL
+    : 'https://pub-82e156ad04d14534bbbdde8d20f65e25.r2.dev'
+).replace(/\/$/, '');
 
 const R2_CONFIG_STORAGE_KEY = 'cw_r2_public_url';
 
@@ -39,8 +43,8 @@ export function isS3ApiEndpointInsteadOfPublicDev(url) {
  * Resolves a V4 relative path (e.g. 'assets/P000001/P000001-front-01.webp')
  * to a full Cloudflare R2 public URL, or returns existing https:// / local paths.
  */
-export function resolveMediaUrl(relativePath, fallbackUrl = '') {
-  if (!relativePath || typeof relativePath !== 'string') return fallbackUrl;
+export function resolveMediaUrl(relativePath) {
+  if (!relativePath || typeof relativePath !== 'string') return '';
   const trimmed = relativePath.trim();
   if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/') || trimmed.startsWith('data:')) {
     return trimmed;
@@ -49,7 +53,7 @@ export function resolveMediaUrl(relativePath, fallbackUrl = '') {
   if (base && !isS3ApiEndpointInsteadOfPublicDev(base)) {
     return `${base}/${trimmed.replace(/^\//, '')}`;
   }
-  return fallbackUrl || `/${trimmed.replace(/^\//, '')}`;
+  return `/${trimmed.replace(/^\//, '')}`;
 }
 
 /**
